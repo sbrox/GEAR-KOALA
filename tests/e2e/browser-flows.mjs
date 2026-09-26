@@ -17,7 +17,50 @@ export async function runBrowserFlows(page, baseURL, group='all') {
   results.push({name,pass:true,text});
  }
  const echo=[/POTENTIALLY GOOD PRICE/,/LOW CONFIDENCE/,/2 eligible sold observations/,/\$400–\$600/,/20% below/,/BUYER-ATTESTED TRANSACTION/,/PUBLIC AUCTION RESULT/,/Not independently source-verifiable/];
+ async function chooseSuggestion(container,name){
+  const menu=page.locator(container);await menu.locator('button').first().waitFor({state:'visible',timeoutMs:20000});
+  const choices=await menu.locator('button').allTextContents();
+  assert(choices.includes(name),`Missing ${name} suggestion: ${choices.join(', ')}`);
+  await menu.getByRole('button',{name,exact:true}).click();
+  const selected=await page.locator('#title').evaluate(input=>input.value);
+  assert(selected===name,`Suggestion did not establish ${name}: ${selected}`);
+ }
  if(group==='all'||group==='home') {
+  await page.goto(new URL('/',baseURL).href);
+  await page.locator('#title').fill('rogue');
+  await chooseSuggestion('#homeSuggestions','Rogue Echo Bike');
+  await page.locator('#price').fill('400');await page.locator('#go').click();
+  await page.locator('#out .resulttop').waitFor({state:'visible',timeoutMs:20000});
+  let text=await out.innerText();for(const pattern of echo)assert(pattern.test(text),`homepage autocomplete Echo: missing ${pattern}: ${text}`);
+  results.push({name:'homepage Rogue suggestion selects canonical Echo Bike',pass:true,text});
+
+  await page.goto(new URL('/',baseURL).href);
+  await page.locator('#title').fill('rogue');
+  await page.locator('#homeSuggestions button').first().waitFor({state:'visible',timeoutMs:20000});
+  await page.locator('#price').fill('400');await page.locator('#go').click();
+  await page.locator('#out .resulttop').waitFor({state:'visible',timeoutMs:20000});
+  text=await out.innerText();assert(/IDENTIFICATION UNCERTAIN/.test(text)&&/Not scored/.test(text),`homepage bare Rogue did not abstain: ${text}`);
+  results.push({name:'homepage bare Rogue still abstains',pass:true,text});
+
+  await page.goto(new URL('/',baseURL).href);
+  await check('homepage direct Rogue Echo Bike','Rogue Echo Bike','400','click',echo);
+
+  await page.goto(new URL('/',baseURL).href);
+  await page.locator('#title').fill('Concept2');
+  await chooseSuggestion('#homeSuggestions','Concept2 Model D PM5');
+  await page.locator('#price').fill('400');await page.locator('#go').click();
+  await page.locator('#out .resulttop').waitFor({state:'visible',timeoutMs:20000});
+  text=await out.innerText();assert(/5 eligible sold observations/.test(text)&&/\$320–\$461/.test(text),`homepage Concept2 Model D suggestion did not value: ${text}`);
+  results.push({name:'homepage Concept2 Model D suggestion evaluates',pass:true,text});
+
+  await page.goto(new URL('/',baseURL).href);
+  await page.locator('#title').fill('Concept2');
+  await chooseSuggestion('#homeSuggestions','Concept2 RowErg');
+  await page.locator('#price').fill('400');await page.locator('#go').click();
+  await page.locator('#out .resulttop').waitFor({state:'visible',timeoutMs:20000});
+  text=await out.innerText();assert(/5 eligible sold observations/.test(text)&&/\$320–\$461/.test(text),`homepage Concept2 RowErg suggestion did not value: ${text}`);
+  results.push({name:'homepage Concept2 RowErg suggestion evaluates',pass:true,text});
+
   await page.goto(new URL('/',baseURL).href);
   await check('homepage click Echo $400','Rogue Echo Bike','400','click',echo);
   await check('homepage price Enter Echo $400','Rogue Echo Bike','400','enter',echo);
@@ -26,6 +69,11 @@ export async function runBrowserFlows(page, baseURL, group='all') {
   await check('homepage replacement chain abstains','Concept2 replacement chain PM5','50','click',[/ITEM NEEDS REVIEW/,/Not scored/],/POTENTIALLY GOOD PRICE|POUNCE|Grab Score/);
  }
  if(group==='all'||group==='checker') {
+  await page.goto(new URL('/checker.html',baseURL).href);
+  await page.locator('#title').fill('rogue');
+  await chooseSuggestion('#suggestions','Rogue Echo Bike');
+  results.push({name:'Deal Checker Rogue autocomplete still selects canonical Echo Bike',pass:true,text:await page.locator('#title').evaluate(input=>input.value)});
+
   await page.goto(new URL('/checker.html',baseURL).href);
   await check('Deal Checker click Echo $400','Rogue Echo Bike','400','click',echo);
   await check('Deal Checker Enter Echo $400','Rogue Echo Bike','400','enter',echo);

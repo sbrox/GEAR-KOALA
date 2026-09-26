@@ -27,6 +27,25 @@ function airdyneAmbiguous(t){return /air\s*dyne|airdyne/i.test(t)&&!/ad\s*[24567
 function lotLike(t,x){return /dumbbell|plate|bumper/i.test(t)||x?.valuation_mode==="lot_weight"||x?.valuation_mode==="hybrid"}
 function selectEquipment(id){selectedEquipmentId=id||null;const x=C.find(x=>x.id===id);$("#title").value=x?x.brand+" "+x.model:"";clearResult();return x;}
 function clearResult(){evaluationVersion++;let o=$("#out");if(o)o.innerHTML=""}
+// Both entry pages use this one catalog picker. Selecting a suggestion records
+// the catalog ID; typing remains deliberately non-authoritative until it can
+// resolve to exactly one compatible model during evaluation.
+function bindCatalogSuggestions(containerSelector,onSelection){
+ const input=$("#title"),list=$(containerSelector);if(!input||!list)return;
+ const clear=()=>list.replaceChildren();
+ const render=()=>{
+  selectedEquipmentId=null;clearResult();clear();
+  const text=input.value.trim().toLowerCase();if(text.length<3)return;
+  for(const x of C.filter(x=>(x.brand+" "+x.model).toLowerCase().includes(text)).slice(0,7)){
+   const b=document.createElement("button");b.type="button";b.textContent=x.brand+" "+x.model;
+   b.onclick=()=>{selectEquipment(x.id);clear();onSelection?.(x);};list.append(b);
+  }
+ };
+ input.addEventListener("input",render);
+ input.addEventListener("keydown",e=>{if(e.key==="Escape")clear();});
+ input.addEventListener("blur",()=>setTimeout(()=>{if(!list.contains(document.activeElement))clear();},0));
+ return {clear,render};
+}
 // Model D was renamed RowErg; PM5 is a monitor, not proof of a frame model.
 // https://www.concept2.com/blog/the-rowerg-a-new-name-for-the-model-d-and-model-e
 function concept2Identity(text) {
@@ -259,5 +278,5 @@ $("#dealForm").addEventListener("submit",async e=>{
  try{await evaluate();}catch(error){console.warn("GearKoala: evaluation failed");out.innerHTML=abstain("CHECK UNAVAILABLE","The check could not finish. Please try again.");}
  finally{go.disabled=false;out.setAttribute("aria-busy","false");}
 });
-["title","price","condition","lotQty","unitWeight","totalWeight","listingUrl"].forEach(id=>{let el=$("#"+id);if(el)el.addEventListener("input",()=>{if(id==="title")selectedEquipmentId=null;clearResult();})});
+["price","condition","lotQty","unitWeight","totalWeight","listingUrl"].forEach(id=>{let el=$("#"+id);if(el)el.addEventListener("input",clearResult)});
 const catalogReady=load();

@@ -16,10 +16,8 @@ qa('.entrytab').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 q('#browseCategory').onchange=()=>updateModels();q('#browseBrand').onchange=()=>updateModels();
 q('#browseModel').onchange=()=>{selectEquipment(q('#browseModel').value);updateLotUI();};
 catalogReady.then(()=>{for(const v of [...new Set(C.map(x=>x.category?.toLowerCase()).filter(Boolean))].sort())q('#browseCategory').add(new Option(v,v));for(const v of [...new Set(C.map(x=>x.brand).filter(Boolean))].sort())q('#browseBrand').add(new Option(v,v));updateModels(false);});
-// Suggestions are optional buttons, never an automatic identity substitution.
-q('#title').addEventListener('input',()=>{const text=q('#title').value.trim().toLowerCase();q('#suggestions').replaceChildren();if(text.length<3)return;for(const x of C.filter(x=>(x.brand+' '+x.model).toLowerCase().includes(text)).slice(0,7)){const b=document.createElement('button');b.type='button';b.textContent=x.brand+' '+x.model;b.onclick=()=>{clearResult();q('#title').value=b.textContent;q('#suggestions').replaceChildren();updateLotUI();};q('#suggestions').append(b);}updateLotUI();});
-q('#title').addEventListener('keydown',e=>{if(e.key==='Escape')q('#suggestions').replaceChildren();});
-q('#title').addEventListener('blur',()=>setTimeout(()=>{if(!q('#suggestions').contains(document.activeElement))q('#suggestions').replaceChildren();},0));
+// Shared with the homepage so catalog matching and canonical selection cannot drift.
+bindCatalogSuggestions('#suggestions',updateLotUI);
 q('#listingUrl').addEventListener('input',()=>{linkVersion++;linkController?.abort();resetInput();q('#compStatus').textContent='Read the listing, then review its title and USD price in Smart Search.';});
 async function readListing(){
  const version=++linkVersion;linkController?.abort();linkController=new AbortController();q('#compStatus').textContent='Reading listing…';
