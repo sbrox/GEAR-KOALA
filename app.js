@@ -247,14 +247,20 @@ function directionalAssessment(p,ev){
 // never re-filter sales or recompute a price/score.
 function valuationDecision(x,p,ev,condition){
  if(!ev.comps.length)return {confidence:"low",verdict:"NO DEAL VERDICT",headline:"Reference estimate",direction:null};
- let headline=ev.enough?"Market estimate":"Limited sales reference",verdict="NO DEAL VERDICT";
- const direction=!ev.canRecommend&&ev.directional?directionalAssessment(p,ev):null;
- if(direction){headline="Low-confidence assessment";verdict=direction.verdict;}
- if(ev.canRecommend){const ratio=p/ev.center,score=Math.round(Math.max(20,Math.min(99,120-ratio*70)));headline=score+' <small>Grab Score</small>';verdict=p<ev.low*.67?"POUNCE":p<ev.low*.82?"WORTH GRABBING":p<=ev.high?"WITHIN OBSERVED RANGE":"ABOVE OBSERVED RANGE";}
- return {confidence:ev.canRecommend?"high":direction?"low":"limited",verdict,headline,direction};
+ const signal=ev.comps.length>=8&&ev.sources>=2?"STRONG MARKET SIGNAL":ev.comps.length>=3?"GOOD MARKET SIGNAL":ev.directional?"LIMITED MARKET SIGNAL":"EARLY MARKET SIGNAL";
+ if(ev.comps.length>=3){const ratio=p/ev.center,score=grabScore(ratio),verdict=ratio<=.67?"POUNCE":ratio<=.82?"WORTH GRABBING":ratio<=1.02?"FAIR":"PASS / NEGOTIATE";return {confidence:"scored",signal,verdict,headline:`${score} <small>Grab Score</small>`,direction:null,score};}
+ const direction=ev.directional?directionalAssessment(p,ev):null;
+ return {confidence:direction?"limited":"early",signal,verdict:direction?.verdict||"NO DEAL VERDICT",headline:direction?"Market direction":"Market evidence incomplete",direction};
+}
+function grabScore(ratio){
+ // Anchors align numerical interpretation with verdict tiers: 0→99, .67→85,
+ // .82→70, 1.0→58, 1.02→50, then declining for increasingly overpriced listings.
+ const lerp=(a,b,t)=>a+(b-a)*t;
+ let score=ratio<=.67?lerp(99,85,ratio/.67):ratio<=.82?lerp(85,70,(ratio-.67)/.15):ratio<=1?lerp(70,58,(ratio-.82)/.18):ratio<=1.02?lerp(58,50,(ratio-1)/.02):50-80*(ratio-1.02);
+ return Math.round(Math.max(20,Math.min(99,score)));
 }
 function valuationSnapshot(label,x,p,ev,decision){
- return {productId:x.id,label,asking:p,transactionIds:ev.comps.map(c=>c.id),compCount:ev.comps.length,range:[ev.low,ev.high],median:ev.center,askingTransactionIds:ev.asking.items.map(c=>c.id),askingCount:ev.asking.count,askingRange:[ev.asking.low,ev.asking.high],askingMedian:ev.asking.median,confidence:decision.confidence,verdict:decision.verdict};
+ return {productId:x.id,label,asking:p,transactionIds:ev.comps.map(c=>c.id),compCount:ev.comps.length,range:[ev.low,ev.high],median:ev.center,askingTransactionIds:ev.asking.items.map(c=>c.id),askingCount:ev.asking.count,askingRange:[ev.asking.low,ev.asking.high],askingMedian:ev.asking.median,confidence:decision.confidence,signal:decision.signal,score:decision.score||null,verdict:decision.verdict};
 }
 function publishValuation(snapshot){
  globalThis.GearKoalaValuation=Object.freeze(snapshot);
@@ -270,7 +276,7 @@ function renderValuation(label,x,p,ev,condition,decision=valuationDecision(x,p,e
   return `<div class="resulttop unscored"><div><span class="result-kicker">${esc(label)}</span><h3>Reference estimate</h3></div><strong class="verdict">NO DEAL VERDICT</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>RETAIL-BASED REFERENCE · NOT SOLD VALUE</span><b>${money(center*.9)}–${money(center*1.1)}</b></div><div><span>CATALOG NEW PRICE</span><b>${money(retail)}</b></div></div><div class="evidence"><b>0 eligible sold observations · low confidence</b><p>This rough reference uses the catalog new price × ${Math.round(rate*100)}% category factor × ${factor} condition factor. It is not a verified market valuation and cannot justify a purchase recommendation. Confirm the exact configuration and compare actual sales before buying.</p><p>${esc(x.gear_brief||x.short_description||"")}</p></div>`;
  }
  const {headline,verdict,direction}=decision;
- return `<div class="resulttop ${ev.canRecommend?"":"unscored"}"><div><span class="result-kicker">${esc(label)}</span><h3>${headline}</h3></div><strong class="verdict">${verdict}</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>${ev.enough?"MIDDLE HALF OF OBSERVED SALES":"OBSERVED SALE RANGE"}</span><b>${money(ev.low)}–${money(ev.high)}</b></div><div><span>MEDIAN SOLD PRICE</span><b>${money(ev.center)}</b></div></div><div class="evidence"><b>${ev.comps.length} eligible sold observations · ${esc(ev.level)} · USD${direction?" · LOW CONFIDENCE":""}</b><p>${ev.canRecommend?"Matched condition and recent independent sales support this comparison.":(direction?direction.explanation+" Confirm condition and configuration before acting. ":"Value evidence, not a purchase recommendation. ")+(ev.comps.length<3?"Small sample. ":"")+(ev.conditionKnown?"":"Reported conditions vary or are incomplete; this is not a condition-adjusted valuation. ")+(ev.dated?"":"Some sale dates are unavailable or historical. ")+(matchFamilyLabel(ev)?"Confirm the frame/configuration before applying this range. ":"")}</p><p>Inspect the equipment and account for auction fees, transport and local market differences.</p>${evidenceList(ev)}</div>${askingContext(ev)}`;
+ return `<div class="resulttop ${decision.confidence==="scored"?"":"unscored"}"><div><span class="result-kicker">${esc(label)}</span><h3>${headline}</h3></div><strong class="verdict">${verdict}</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>${ev.enough?"MIDDLE HALF OF OBSERVED SALES":"OBSERVED SALE RANGE"}</span><b>${money(ev.low)}–${money(ev.high)}</b></div><div><span>MEDIAN SOLD PRICE</span><b>${money(ev.center)}</b></div></div><div class="evidence"><b>${esc(decision.signal)} · ${ev.comps.length} eligible sold observations · ${esc(ev.level)} · USD</b><p>${decision.confidence==="scored"?"Verified compatible sales support this market comparison.":(direction?direction.explanation+" Confirm condition and configuration before acting. ":"Value evidence, not a purchase recommendation. ")+(ev.comps.length<3?"Small sample. ":"")+(ev.conditionKnown?"":"Reported conditions vary or are incomplete; this is not a condition-adjusted valuation. ")+(ev.dated?"":"Some sale dates are unavailable or historical. ")+(matchFamilyLabel(ev)?"Confirm the frame/configuration before applying this range. ":"")}</p><p>Inspect the equipment and account for auction fees, transport and local market differences.</p>${evidenceList(ev)}</div>${askingContext(ev)}`;
 }
 function askingContext(ev){const a=ev.asking;if(!a?.count)return "";return `<section class="asking-context"><strong>ASKING MARKET CONTEXT</strong><p>${a.count} comparable asking observations · ${money(a.low)}–${money(a.high)} · median ${money(a.median)}${a.active?` · ${a.active} active`:""}${a.ended?` · ${a.ended} ended asking listings`:""}</p><small>Asking prices are not completed sale prices. They do not affect the verified sold range, median, confidence, or deal assessment.</small></section>`}
 function matchFamilyLabel(ev){return /family/.test(ev.level);}

@@ -53,11 +53,11 @@ test('adequate compatible independent known-condition sales can still produce a 
 test('edited inputs invalidate in-flight valuations',async()=>{const {ctx,fields}=setup();let finish;ctx.observationsFor=()=>new Promise(r=>finish=r);fields['#title'].value='Rogue Echo Bike';const pending=ctx.evaluate();await Promise.resolve();ctx.clearResult();finish([]);await pending;assert.equal(fields['#out'].innerHTML,'');});
 
 test('REAL POSITIVE: Rogue Echo Bike at $400 returns a cautious direction from two credible sales',async()=>{
- const {ctx,fields}=realSetup();const html=await run(ctx,fields,'Rogue Echo Bike','400');assert.match(html,/POTENTIALLY GOOD PRICE/);assert.match(html,/LOW CONFIDENCE/);assert.match(html,/20% below/);assert.match(html,/2 eligible sold observations/);assert.match(html,/\$400–\$600/);assert.match(html,/MEDIAN SOLD PRICE<\/span><b>\$500/);assert.match(html,/BUYER-ATTESTED TRANSACTION/);assert.match(html,/PUBLIC AUCTION RESULT/);assert.match(html,/Not independently source-verifiable/);assert.doesNotMatch(html,/I can’t value/);noRecommendation(html);
+ const {ctx,fields}=realSetup();const html=await run(ctx,fields,'Rogue Echo Bike','400');assert.match(html,/POTENTIALLY GOOD PRICE/);assert.match(html,/LIMITED MARKET SIGNAL/);assert.match(html,/20% below/);assert.match(html,/2 eligible sold observations/);assert.match(html,/\$400–\$600/);assert.match(html,/MEDIAN SOLD PRICE<\/span><b>\$500/);assert.match(html,/BUYER-ATTESTED TRANSACTION/);assert.match(html,/PUBLIC AUCTION RESULT/);assert.match(html,/Not independently source-verifiable/);assert.doesNotMatch(html,/I can’t value/);noRecommendation(html);
 });
 test('REAL POSITIVE: Model D PM5 and RowErg PM5 retrieve compatible identities and return useful values',async()=>{
  const {ctx,fields}=realSetup();for(const title of ['Concept2 Model D PM5','Concept2 RowErg PM5','Concept2 RowErg','Concept2 commercial rowing machine PM5 used']){
-  const html=await run(ctx,fields,title);assert.match(html,/5 eligible sold observations/,title);assert.match(html,/\$320–\$461/,title);assert.match(html,/MEDIAN SOLD PRICE<\/span><b>\$424/,title);assert.doesNotMatch(html,/I can’t value/,title);noRecommendation(html);
+  const html=await run(ctx,fields,title,'200');assert.match(html,/5 eligible sold observations/,title);assert.match(html,/\$320–\$461/,title);assert.match(html,/MEDIAN SOLD PRICE<\/span><b>\$424/,title);assert.match(html,/GOOD MARKET SIGNAL/,title);assert.match(html,/<strong class="verdict">POUNCE<\/strong>/,title);assert.match(html,/89 <small>Grab Score<\/small>/,title);assert.doesNotMatch(html,/I can’t value/,title);
  }
 });
 test('REAL POSITIVE: missing Concept2 monitor offers separate actionable ranges instead of mixing generations',async()=>{
@@ -88,6 +88,28 @@ test('small credible pools permit direction without enabling POUNCE; weak eviden
  assert.equal(ctx.directionalAssessment(400,{low:400,high:600,center:500}).verdict,'POTENTIALLY GOOD PRICE');
  assert.equal(ctx.directionalAssessment(500,{low:400,high:600,center:500}).verdict,'WITHIN OBSERVED RANGE');
  assert.equal(ctx.directionalAssessment(700,{low:400,high:600,center:500}).verdict,'LOOKS HIGH VS SALES');
+});
+test('Grab Score is monotonic and numerically agrees with the verdict boundaries',()=>{
+ const {ctx}=setup(),x=ctx.rows[0],ev=ctx.reliableEvidence([1,2,3,4,5].map(i=>sale(i)),x,null,'good',NOW);
+ for(const [ratio,verdict,min,max] of [
+  [0,'POUNCE',99,99],[.47,'POUNCE',89,90],[.67,'POUNCE',85,85],
+  [.82,'WORTH GRABBING',70,70],[1,'FAIR',57,59],[1.02,'FAIR',50,50],
+  [1.25,'PASS / NEGOTIATE',31,33]
+ ]){
+  const d=ctx.valuationDecision(x,ev.center*ratio,ev,'good');
+  assert.equal(d.verdict,verdict,`ratio ${ratio}`);assert.ok(d.score>=min&&d.score<=max,`ratio ${ratio}: ${d.score}`);
+ }
+});
+test('asking evidence stays separate from verified sales and preserves audited Echo context',()=>{
+ const {ctx}=realSetup(),x=ctx.rows.find(x=>x.model==='Echo Bike');
+ const ev=ctx.reliableEvidence(captured.observations,x,null,'good',NOW);
+ assert.deepEqual(Array.from(ev.comps,c=>c.id).sort(),['830288b8-0d47-4f87-9b02-82e2e89c489e','c858883f-ac74-43d7-9fca-23b2c9199f19']);
+ assert.equal(ev.center,500);assert.equal(ev.asking.count,6);assert.equal(ev.asking.low,500);assert.equal(ev.asking.high,750);assert.equal(ev.asking.median,650);
+ assert.equal(ev.asking.active,2);assert.equal(ev.asking.ended,4);
+ const duplicate={...ev.asking.items[0],id:'duplicate-asking'};
+ const accessory={...ev.asking.items[0],id:'accessory-asking',source_listing_id:'accessory',title:'Rogue Echo Bike replacement pedal'};
+ const again=ctx.reliableEvidence([...captured.observations,duplicate,accessory],x,null,'good',NOW);
+ assert.equal(again.asking.count,6);assert.deepEqual(Array.from(again.comps,c=>c.id).sort(),Array.from(ev.comps,c=>c.id).sort());
 });
 test('Echo generation requests cannot inherit unconfirmed-generation comps or V3 retail value',async()=>{
  const {ctx,fields}=realSetup();for(const title of ['Rogue Echo Bike V2','Rogue Echo Bike V3']){const html=await run(ctx,fields,title,'400');assert.match(html,/No sold evidence confirms the requested generation/);assert.doesNotMatch(html,/POTENTIALLY GOOD PRICE|Reference estimate/);}

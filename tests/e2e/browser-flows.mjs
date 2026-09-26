@@ -17,7 +17,7 @@ export async function runBrowserFlows(page, baseURL, group='all') {
   assert(!rejected.test(text),`${name}: unexpected verdict: ${text}`);
   results.push({name,pass:true,text});
  }
- const echo=[/POTENTIALLY GOOD PRICE/,/LOW CONFIDENCE/,/2 eligible sold observations/,/\$400–\$600/,/20% below/,/BUYER-ATTESTED TRANSACTION/,/PUBLIC AUCTION RESULT/,/Not independently source-verifiable/];
+ const echo=[/POTENTIALLY GOOD PRICE/,/LIMITED MARKET SIGNAL/,/2 eligible sold observations/,/\$400–\$600/,/20% below/,/BUYER-ATTESTED TRANSACTION/,/PUBLIC AUCTION RESULT/,/Not independently source-verifiable/];
  async function chooseSuggestion(container,name){
   const menu=page.locator(container);await menu.locator('button').first().waitFor({state:'visible',timeoutMs:20000});
   const choices=await menu.locator('button').allTextContents();
@@ -86,7 +86,7 @@ export async function runBrowserFlows(page, baseURL, group='all') {
   await check('Deal Checker click Echo $400','Rogue Echo Bike','400','click',echo);
   const checkerEchoSnapshot=JSON.parse(await out.getAttribute('data-valuation'));
   if(homepageEchoSnapshot){
-   for(const key of ['transactionIds','compCount','range','median','confidence','verdict']){
+   for(const key of ['transactionIds','compCount','range','median','askingTransactionIds','askingCount','askingRange','askingMedian','confidence','signal','score','verdict']){
     assert(JSON.stringify(checkerEchoSnapshot[key])===JSON.stringify(homepageEchoSnapshot[key]),`homepage/checker valuation mismatch for ${key}`);
    }
    results.push({name:'homepage and Deal Checker share the exact Echo valuation object',pass:true,text:JSON.stringify(checkerEchoSnapshot)});
@@ -95,7 +95,7 @@ export async function runBrowserFlows(page, baseURL, group='all') {
   await check('Deal Checker Model D PM5','Concept2 Model D PM5','400','enter',[/[1-9]\d* eligible sold observations/,/MEDIAN SOLD PRICE/,/Concept2/]);
   const checkerConceptSnapshot=JSON.parse(await out.getAttribute('data-valuation'));
   if(homepageConceptSnapshot){
-   for(const key of ['transactionIds','compCount','range','median','confidence','verdict']){
+   for(const key of ['transactionIds','compCount','range','median','askingTransactionIds','askingCount','askingRange','askingMedian','confidence','signal','score','verdict']){
     assert(JSON.stringify(checkerConceptSnapshot[key])===JSON.stringify(homepageConceptSnapshot[key]),`homepage/checker Concept2 valuation mismatch for ${key}`);
    }
    results.push({name:'homepage and Deal Checker share the exact Concept2 valuation object',pass:true,text:JSON.stringify(checkerConceptSnapshot)});
