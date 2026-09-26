@@ -30,7 +30,7 @@ async function readListing(){
   q('#title').focus();
  }catch(e){if(version!==linkVersion||e.name==='AbortError')return;setMode('search');q('#compStatus').textContent='Could not verify this listing. Enter its title and USD price manually.';q('#title').focus();}
 }
-q('#go').addEventListener('click',e=>{q('#suggestions').replaceChildren();if(mode==='link'){e.stopImmediatePropagation();e.preventDefault();readListing();}},true);
+q('#dealForm').addEventListener('submit',e=>{q('#suggestions').replaceChildren();if(mode==='link'){e.stopImmediatePropagation();e.preventDefault();readListing();}},true);
 function updateLotUI(){q('#lotFields').classList.toggle('show',/dumbbell|plate|bumper|weight set/i.test(q('#title').value));}
 for(const id of ['lotQty','unitWeight'])q('#'+id).addEventListener('input',()=>{if(!q('#totalWeight').dataset.manual){const a=parsePrice(q('#lotQty').value),b=parsePrice(q('#unitWeight').value);q('#totalWeight').value=a&&b?String(a*b):'';}});
 q('#totalWeight').addEventListener('input',()=>q('#totalWeight').dataset.manual='1');

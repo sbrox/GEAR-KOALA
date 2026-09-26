@@ -161,11 +161,16 @@ function uniqueSales(rows){
  }
  return [...byKey.entries()].filter(([key])=>!conflicts.has(key)).map(([,c])=>c);
 }
-function reliableEvidence(rows,x,match,condition,now=Date.now()){
+function reliableEvidence(rows,x,match,condition,now=Date.now(),query=""){
  const usable=uniqueSales(rows.filter(c=>usableSale(c)&&(!Number.isFinite(saleDate(c))||saleDate(c)<=now)));
  let candidates,level="same catalog model";
  if(match){const selected=concept2Comps(match,usable);candidates=selected.comps;level=selected.level;}
  else candidates=usable.filter(c=>modelFits(c.title,x));
+ // A catalog record can represent a product line, not proof of a generation.
+ const requestedGeneration=(query.match(/\bv(?:ersion)?\s*(\d+(?:\.\d+)?)\b/i)||[])[1];
+ if(requestedGeneration)candidates=candidates.filter(c=>Number((c.title.match(/\bv(?:ersion)?\s*(\d+(?:\.\d+)?)\b/i)||[])[1])===Number(requestedGeneration));
+ const generationUnconfirmed=!match&&/^v\d/i.test(x.generation||"")&&candidates.some(c=>! /\bv(?:ersion)?\s*\d/i.test(c.title));
+ if(generationUnconfirmed)level="same named product · generation unconfirmed";
  // Recent evidence is preferred when sufficient, but missing a sale date or a
  // condition adjective does not turn verified sale evidence into no evidence.
  const recent=candidates.filter(c=>Number.isFinite(saleDate(c))&&now-saleDate(c)<=365*86400000);
@@ -179,10 +184,29 @@ function reliableEvidence(rows,x,match,condition,now=Date.now()){
  // Valuation and a purchase recommendation are separate decisions. Limited,
  // historical or mixed-condition evidence still gives useful labeled context.
  const enough=comps.length>=3&&low>0&&high/low<=2;
- const canRecommend=enough&&sources.size>=2&&dated&&conditionKnown&&exactIdentity&&comps.every(c=>!saleIdentity(c).attested);
- return {comps,enough,canRecommend,low,high,center,level,conditionKnown,dated,sources:sources.size};
+ const canRecommend=enough&&sources.size>=2&&dated&&conditionKnown&&exactIdentity&&!generationUnconfirmed&&comps.every(c=>!saleIdentity(c).attested);
+ // A small credible sample can support direction without a Grab Score or POUNCE.
+ // Preserve identity/provenance gates; only allow a bounded, recent sample with
+ // known working conditions no more than one grade from the user's selection.
+ const grades={fair:0,good:1,excellent:2};
+ const nearCondition=comps.every(c=>saleCondition(c)&&Math.abs(grades[saleCondition(c)]-grades[condition])<=1);
+ const recentContext=comps.every(c=>Number.isFinite(saleDate(c))&&now-saleDate(c)<=365*86400000);
+ const publicSale=comps.some(c=>!saleIdentity(c).attested&&c.sold_at);
+ const directional=comps.length>=2&&sources.size>=2&&prices.at(-1)/prices[0]<=2&&exactIdentity&&nearCondition&&recentContext&&publicSale;
+ return {comps,enough,canRecommend,directional,generationUnconfirmed,low,high,center,level,conditionKnown,dated,sources:sources.size};
 }
-function evidenceList(ev){return `<ul>${ev.comps.map(c=>{const id=saleIdentity(c),date=c.sold_at?c.sold_at.slice(0,10):c.observed_at?"observed "+c.observed_at.slice(0,10):"sale date unavailable";const text=esc(id.source)+" · "+esc(date)+" · "+money(soldPrice(c));return `<li>${id.url?`<a href="${esc(id.url)}" target="_blank" rel="noopener noreferrer">${text}</a>`:text+" · buyer-attested, no public listing"} · ${esc(c.condition||"condition not recorded")}</li>`;}).join("")}</ul>`;}
+function evidenceList(ev){return `<ul class="sale-evidence">${ev.comps.map(c=>{
+ const id=saleIdentity(c),date=c.sold_at?"sold "+c.sold_at.slice(0,10):c.observed_at?"recorded "+c.observed_at.slice(0,10)+" · sale date unknown":"sale date unknown";
+ const kind=id.attested?"BUYER-ATTESTED TRANSACTION":/auction/.test(c.transaction_type)?"PUBLIC AUCTION RESULT":"PUBLIC SALE RECORD";
+ const detail=id.attested?"Buyer-reported paid price + sold screenshot; no public listing. Not independently source-verifiable.":/auction/.test(c.transaction_type)?"Published final bid; buyer premium, tax and transport may be additional.":"Public listing source recorded with this sale.";
+ const text=esc(id.source)+" · "+esc(date)+" · "+money(soldPrice(c));
+ return `<li class="${id.attested?"attested-sale":"public-sale"}"><strong class="provenance-label">${kind}</strong>${id.url?`<a href="${esc(id.url)}" target="_blank" rel="noopener noreferrer">${text}</a>`:text}<span class="provenance-detail">${detail}</span><span>${esc(c.condition||"condition not recorded")}</span></li>`;
+ }).join("")}</ul>`;}
+function directionalAssessment(p,ev){
+ const verdict=p<=ev.low?"POTENTIALLY GOOD PRICE":p<=ev.high?"WITHIN OBSERVED RANGE":"LOOKS HIGH VS SALES";
+ const difference=Math.round(Math.abs(p/ev.center-1)*100);
+ return {verdict,explanation:`${money(p)} is ${difference?difference+"% "+(p<ev.center?"below":"above"):"equal to"} the ${money(ev.center)} sample median${p===ev.low?" and matches the lowest recorded sale":""}. This is a directional comparison, not a reliable discount or savings estimate.`};
+}
 function renderValuation(label,x,p,ev,condition){
  const hasSales=ev.comps.length>0;
  if(!hasSales){
@@ -193,8 +217,10 @@ function renderValuation(label,x,p,ev,condition){
   return `<div class="resulttop unscored"><div><span class="result-kicker">${esc(label)}</span><h3>Reference estimate</h3></div><strong class="verdict">NO DEAL VERDICT</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>RETAIL-BASED REFERENCE · NOT SOLD VALUE</span><b>${money(center*.9)}–${money(center*1.1)}</b></div><div><span>CATALOG NEW PRICE</span><b>${money(retail)}</b></div></div><div class="evidence"><b>0 eligible sold observations · low confidence</b><p>This rough reference uses the catalog new price × ${Math.round(rate*100)}% category factor × ${factor} condition factor. It is not a verified market valuation and cannot justify a purchase recommendation. Confirm the exact configuration and compare actual sales before buying.</p><p>${esc(x.gear_brief||x.short_description||"")}</p></div>`;
  }
  let headline=ev.enough?"Market estimate":"Limited sales reference",verdict="NO DEAL VERDICT";
+ const direction=!ev.canRecommend&&ev.directional?directionalAssessment(p,ev):null;
+ if(direction){headline="Low-confidence assessment";verdict=direction.verdict;}
  if(ev.canRecommend){const ratio=p/ev.center,score=Math.round(Math.max(20,Math.min(99,120-ratio*70)));headline=score+' <small>Grab Score</small>';verdict=p<ev.low*.67?"POUNCE":p<ev.low*.82?"WORTH GRABBING":p<=ev.high?"WITHIN OBSERVED RANGE":"ABOVE OBSERVED RANGE";}
- return `<div class="resulttop ${ev.canRecommend?"":"unscored"}"><div><span class="result-kicker">${esc(label)}</span><h3>${headline}</h3></div><strong class="verdict">${verdict}</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>${ev.enough?"MIDDLE HALF OF OBSERVED SALES":"OBSERVED SALE RANGE"}</span><b>${money(ev.low)}–${money(ev.high)}</b></div><div><span>MEDIAN SOLD PRICE</span><b>${money(ev.center)}</b></div></div><div class="evidence"><b>${ev.comps.length} eligible sold observations · ${esc(ev.level)} · USD</b><p>${ev.canRecommend?"Matched condition and recent independent sales support this comparison.":"Value evidence, not a purchase recommendation. "+(ev.comps.length<3?"Small sample. ":"")+(ev.conditionKnown?"":"Reported conditions vary or are incomplete; this is not a condition-adjusted valuation. ")+(ev.dated?"":"Some sale dates are unavailable or historical. ")+(matchFamilyLabel(ev)?"Confirm the frame/configuration before applying this range. ":"")}</p><p>Inspect the equipment and account for auction fees, transport and local market differences.</p>${evidenceList(ev)}</div>`;
+ return `<div class="resulttop ${ev.canRecommend?"":"unscored"}"><div><span class="result-kicker">${esc(label)}</span><h3>${headline}</h3></div><strong class="verdict">${verdict}</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>${ev.enough?"MIDDLE HALF OF OBSERVED SALES":"OBSERVED SALE RANGE"}</span><b>${money(ev.low)}–${money(ev.high)}</b></div><div><span>MEDIAN SOLD PRICE</span><b>${money(ev.center)}</b></div></div><div class="evidence"><b>${ev.comps.length} eligible sold observations · ${esc(ev.level)} · USD${direction?" · LOW CONFIDENCE":""}</b><p>${ev.canRecommend?"Matched condition and recent independent sales support this comparison.":(direction?direction.explanation+" Confirm condition and configuration before acting. ":"Value evidence, not a purchase recommendation. ")+(ev.comps.length<3?"Small sample. ":"")+(ev.conditionKnown?"":"Reported conditions vary or are incomplete; this is not a condition-adjusted valuation. ")+(ev.dated?"":"Some sale dates are unavailable or historical. ")+(matchFamilyLabel(ev)?"Confirm the frame/configuration before applying this range. ":"")}</p><p>Inspect the equipment and account for auction fees, transport and local market differences.</p>${evidenceList(ev)}</div>`;
 }
 function matchFamilyLabel(ev){return /family/.test(ev.level);}
 async function observationsFor(ids){let all=[];for(let offset=0;offset<10000;){const page=await api(`market_observations?equipment_id=in.(${ids.join(",")})&listing_status=eq.sold&verification_status=eq.verified&select=*&order=sold_at.desc,id.asc&limit=500&offset=${offset}`);all.push(...page);if(!page.length)return all;offset+=page.length;}throw Error("Evidence limit reached");}
@@ -222,9 +248,16 @@ async function evaluate(){
  out.innerHTML='<div class="needs-data">Checking compatible sold evidence…</div>';
  let rows;try{const ids=match?match.rows.map(r=>r.id):C.filter(r=>normalized(r.brand+" "+r.model)===normalized(x.brand+" "+x.model)).map(r=>r.id);rows=await observationsFor(ids);}catch(e){if(version===evaluationVersion){console.warn("GearKoala: sold evidence unavailable");out.innerHTML=abstain(label,"Sold evidence could not be loaded. This is a data-availability failure, not an estimate.",x);}return;}
  if(version!==evaluationVersion)return;
- const condition={"1":"excellent",".93":"good",".82":"fair"}[$("#condition").value],ev=reliableEvidence(rows,x,match,condition);
+ const condition={"1":"excellent",".93":"good",".82":"fair"}[$("#condition").value],ev=reliableEvidence(rows,x,match,condition,Date.now(),raw);
+ if(/\bv(?:ersion)?\s*\d/i.test(raw)&&!ev.comps.length){out.innerHTML=abstain(label,"No sold evidence confirms the requested generation. A different or unknown generation cannot establish its value.",x);return;}
  out.innerHTML=renderValuation(label,x,p,ev,condition);
 }
-$("#go").onclick=evaluate;
+$("#go").onclick=null;
+// A real form makes mouse, keyboard and mobile submit use the same flow.
+$("#dealForm").addEventListener("submit",async e=>{
+ e.preventDefault();const go=$("#go"),out=$("#out");go.disabled=true;out.setAttribute("aria-busy","true");
+ try{await evaluate();}catch(error){console.warn("GearKoala: evaluation failed");out.innerHTML=abstain("CHECK UNAVAILABLE","The check could not finish. Please try again.");}
+ finally{go.disabled=false;out.setAttribute("aria-busy","false");}
+});
 ["title","price","condition","lotQty","unitWeight","totalWeight","listingUrl"].forEach(id=>{let el=$("#"+id);if(el)el.addEventListener("input",()=>{if(id==="title")selectedEquipmentId=null;clearResult();})});
 const catalogReady=load();

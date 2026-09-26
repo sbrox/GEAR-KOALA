@@ -9,7 +9,7 @@ class FixedDate extends Date {static now(){return NOW;}}
 function setup(catalog){
  const fields={};
  function element(){return {value:'',innerHTML:'',dataset:{},options:[],addEventListener(){},replaceChildren(...options){this.options=options;this.value='';},add(option){this.options.push(option);},classList:{toggle(){}}};}
- for(const id of ['title','price','condition','out','browseCategory','browseBrand','browseModel','suggestions','lotQty','unitWeight','totalWeight','lotFields','go','listingUrl','compStatus'])fields['#'+id]=element();
+ for(const id of ['title','price','condition','out','browseCategory','browseBrand','browseModel','suggestions','lotQty','unitWeight','totalWeight','lotFields','go','listingUrl','compStatus','dealForm'])fields['#'+id]=element();
  fields['#price'].value='350';fields['#condition'].value='.93';
  const ctx=vm.createContext({console,Intl,URL,URLSearchParams,Date:FixedDate,setTimeout,Option:function(text,value){return {text,value};},location:{search:'',hash:''},document:{querySelector:s=>fields[s]||null,querySelectorAll:()=>[]}});
  vm.runInContext(source,ctx);
@@ -52,8 +52,8 @@ test('adequate compatible independent known-condition sales can still produce a 
 });
 test('edited inputs invalidate in-flight valuations',async()=>{const {ctx,fields}=setup();let finish;ctx.observationsFor=()=>new Promise(r=>finish=r);fields['#title'].value='Rogue Echo Bike';const pending=ctx.evaluate();await Promise.resolve();ctx.clearResult();finish([]);await pending;assert.equal(fields['#out'].innerHTML,'');});
 
-test('REAL POSITIVE: Rogue Echo Bike returns two verified sales and $400–$600 value reference',async()=>{
- const {ctx,fields}=realSetup();const html=await run(ctx,fields,'Rogue Echo Bike');assert.match(html,/2 eligible sold observations/);assert.match(html,/\$400–\$600/);assert.match(html,/MEDIAN SOLD PRICE<\/span><b>\$500/);assert.match(html,/buyer-attested/);assert.doesNotMatch(html,/I can’t value/);noRecommendation(html);
+test('REAL POSITIVE: Rogue Echo Bike at $400 returns a cautious direction from two credible sales',async()=>{
+ const {ctx,fields}=realSetup();const html=await run(ctx,fields,'Rogue Echo Bike','400');assert.match(html,/POTENTIALLY GOOD PRICE/);assert.match(html,/LOW CONFIDENCE/);assert.match(html,/20% below/);assert.match(html,/2 eligible sold observations/);assert.match(html,/\$400–\$600/);assert.match(html,/MEDIAN SOLD PRICE<\/span><b>\$500/);assert.match(html,/BUYER-ATTESTED TRANSACTION/);assert.match(html,/PUBLIC AUCTION RESULT/);assert.match(html,/Not independently source-verifiable/);assert.doesNotMatch(html,/I can’t value/);noRecommendation(html);
 });
 test('REAL POSITIVE: Model D PM5 and RowErg PM5 retrieve compatible identities and return useful values',async()=>{
  const {ctx,fields}=realSetup();for(const title of ['Concept2 Model D PM5','Concept2 RowErg PM5','Concept2 RowErg','Concept2 commercial rowing machine PM5 used']){
@@ -78,4 +78,31 @@ test('REAL POSITIVE: Browse Rogue + Power Rack selects fresh catalog identity an
 });
 test('Browse with multiple matching models does not silently select or reuse a previous identity',async()=>{
  const {ctx,fields}=realSetup();vm.runInContext(readFileSync(new URL('../checker-ui.js',`file://${__filename}`),'utf8'),ctx);await Promise.resolve();ctx.setMode('browse');fields['#browseBrand'].value='Concept2';fields['#browseCategory'].value='rower';ctx.updateModels();assert.equal(fields['#title'].value,'');assert.equal(fields['#browseModel'].value,'');await ctx.evaluate();assert.match(fields['#out'].innerHTML,/IDENTIFICATION NEEDED/);
+});
+
+test('small credible pools permit direction without enabling POUNCE; weak evidence still abstains',()=>{
+ const {ctx}=setup(),x=ctx.rows[0],rows=[sale(1),sale(2)];
+ const ev=ctx.reliableEvidence(rows,x,null,'good',NOW);assert.equal(ev.directional,true);assert.equal(ev.canRecommend,false);
+ for(const data of [[sale(1)],rows.map(c=>({...c,condition:'unknown'})),rows.map(c=>({...c,condition:'fair'})),rows.map(c=>({...c,sold_at:'2020-01-01'})),rows.map(c=>({...c,verification_status:'asking_verified'})),[sale(1),sale(3)]])assert.equal(ctx.reliableEvidence(data,x,null,'excellent',NOW).directional,false);
+ const wide=ctx.reliableEvidence([sale(1),sale(2,{normalized_price:5000})],x,null,'good',NOW);assert.equal(wide.directional,false);
+ assert.equal(ctx.directionalAssessment(400,{low:400,high:600,center:500}).verdict,'POTENTIALLY GOOD PRICE');
+ assert.equal(ctx.directionalAssessment(500,{low:400,high:600,center:500}).verdict,'WITHIN OBSERVED RANGE');
+ assert.equal(ctx.directionalAssessment(700,{low:400,high:600,center:500}).verdict,'LOOKS HIGH VS SALES');
+});
+test('Echo generation requests cannot inherit unconfirmed-generation comps or V3 retail value',async()=>{
+ const {ctx,fields}=realSetup();for(const title of ['Rogue Echo Bike V2','Rogue Echo Bike V3']){const html=await run(ctx,fields,title,'400');assert.match(html,/No sold evidence confirms the requested generation/);assert.doesNotMatch(html,/POTENTIALLY GOOD PRICE|Reference estimate/);}
+});
+test('buyer attestation requires matching transaction price and cannot stand in for two independent sales',()=>{
+ const {ctx}=realSetup(),x=ctx.rows.find(x=>x.model==='Echo Bike'),row=captured.observations.find(c=>c.transaction_type==='private_party_sale');
+ assert.equal(ctx.usableSale({...row,raw_payload:{...row.raw_payload,actual_transaction_price:1}}),false);
+ const ev=ctx.reliableEvidence([row,{...row,id:'another'}],x,null,'good',NOW);assert.equal(ev.directional,false);assert.equal(ev.canRecommend,false);
+});
+
+test('FULL LIVE AUDIT: all 41 linked and unlinked Echo observations yield only two completed-sale comps',()=>{
+ const {ctx}=realSetup(),x=ctx.rows.find(x=>x.model==='Echo Bike');
+ const all=JSON.parse(readFileSync(new URL('./echo-observations.json',`file://${__filename}`)));
+ assert.equal(all.length,41);assert.equal(all.filter(c=>c.listing_status==='sold').length,7);
+ const ev=ctx.reliableEvidence(all,x,null,'good',NOW);
+ assert.deepEqual(Array.from(ev.comps,c=>c.id).sort(),['830288b8-0d47-4f87-9b02-82e2e89c489e','c858883f-ac74-43d7-9fca-23b2c9199f19']);
+ assert.equal(ev.directional,true);assert.equal(ev.canRecommend,false);assert.equal(ev.center,500);
 });
