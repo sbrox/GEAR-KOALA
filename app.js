@@ -1,33 +1,56 @@
-const U="https://dyvzrboshanctbjiukvh.supabase.co",K="sb_publishable_ZKuyrkd9Rv7L-4HUXv_v-g_Ka5l9hSD";let C=[];const $=s=>document.querySelector(s),num=v=>Number(String(v||"").replace(/[^0-9.]/g,""))||0,money=n=>n?new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n):"—";
+const U="https://dyvzrboshanctbjiukvh.supabase.co",K="sb_publishable_ZKuyrkd9Rv7L-4HUXv_v-g_Ka5l9hSD";let C=[];const $=s=>document.querySelector(s),num=v=>parsePrice(v),money=n=>n?new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n):"—";
 async function api(path){let r=await fetch(U+"/rest/v1/"+path,{headers:{apikey:K,Authorization:"Bearer "+K}});if(!r.ok)throw Error(r.status);return r.json()}
-async function load(){try{C=await api("equipment?select=*");if($("#status")){$("#status").textContent="● LIVE · "+C.length+" MODELS";$("#status").className="live";}let obs=await api("market_observations?select=id&limit=1000");$("#compStatus").textContent=`Market layer live · ${obs.length} observations`;$("#compStatus").className="compstatus livecomp"}catch(e){if($("#status")){$("#status").textContent="● DATABASE OFFLINE";$("#status").className="bad";}}}
-function tokens(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim().split(/\s+/).filter(x=>x.length>1)}
-function scoreCandidate(t,x){
- let q=tokens(t), fields=[x.brand,x.model,x.category,x.subtype,x.equipment_family,...(x.aliases||[])].filter(Boolean).map(String);
- let hay=tokens(fields.join(" ")), set=new Set(hay), overlap=q.filter(z=>set.has(z)).length;
- let exact=fields.some(f=>String(t).toLowerCase().includes(f.toLowerCase())&&f.length>=5)?4:0;
- let generic=x.generic_match?0:1;
- return overlap*3+exact+generic;
+let catalogAvailable=false,evaluationVersion=0,selectedEquipmentId=null;
+async function load(){try{C=await api("equipment?select=*");catalogAvailable=true;$("#compStatus").textContent="Catalog ready · sold evidence is checked per item";}catch(e){console.warn("GearKoala: catalog unavailable");$("#compStatus").textContent="Catalog unavailable. Please try again later.";}}
+function parsePrice(value){const s=String(value??"").trim().replace(/^\$\s*/,"");if(!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(s))return 0;const n=Number(s.replace(/,/g,""));return Number.isFinite(n)&&n>0&&n<=10000000?n:0;}
+function normalized(s){return String(s||"").toLowerCase().replace(/concept\s*[- ]?2/g,"concept2").replace(/[^a-z0-9+]+/g," ").trim();}
+function containsPhrase(text,phrase){return (" "+normalized(text)+" ").includes(" "+normalized(phrase)+" ");}
+function unsafeItem(t){return /\b(replacement|spare|parts?|repair|broken|damaged|untested|bundle|lot of|versus|vs|replica|knockoff|compatible|fits)\b|not working|needs work|monitor only|chain only|seat only|handle only/i.test(t);}
+function modelFits(t,x){
+ if(!containsPhrase(t,x.brand)||!containsPhrase(t,x.model))return false;
+ // Bike and Bike+ (and unmentioned generations) must not collapse together.
+ if(/\bbike\b/i.test(x.model)&&!/\+|plus/i.test(x.model)&&/bike\s*(?:\+|plus)/i.test(t))return false;
+ const categories=[[/\b(treadmill|tredmill)\b/i,/treadmill|walking pad/i],[/\b(rower|rowing|waterrower)\b/i,/rower/i],[/\b(rack)\b/i,/rack|stand/i],[/\b(elliptical)\b/i,/elliptical|motion trainer|arc trainer/i]];
+ return !categories.some(([query,category])=>query.test(t)&&!category.test(x.category||""));
 }
-function candidates(t){return C.map(x=>({x,s:scoreCandidate(t,x)})).filter(o=>o.s>=4).sort((a,b)=>b.s-a.s)}
 function exactFind(t){
- let match=concept2Match(t);if(match)return match.x;
- let a=candidates(t),identity=concept2Identity(t);
- if(identity){
-  // A shared brand/PM5 token must not turn a SkiErg, BikeErg or older frame into a RowErg.
-  const kind=String(t).match(/ski\s*erg|bike\s*erg|dynamic|model\s*[abce]\b/i)?.[0];
-  if(!kind||/monitor only|pm\s*5 only/i.test(t))return null;
-  const key=kind.toLowerCase().replace(/\s+/g,"");
-  a=a.filter(({x})=>/concept\s*2/i.test(x.brand)&&x.model.toLowerCase().replace(/\s+/g,"").includes(key));
- }
- return a.length?a[0].x:null;
+ if(unsafeItem(t))return null;
+ const c2=concept2Match(t);if(c2)return c2.x;
+ const matches=C.filter(x=>!x.generic_match&&modelFits(t,x));
+ const keys=new Set(matches.map(x=>normalized(x.brand+" "+x.model)));
+ return keys.size===1?matches[0]||null:null;
 }
 function median(a){a=[...a].sort((x,y)=>x-y);let n=a.length;return n%2?a[(n-1)/2]:(a[n/2-1]+a[n/2])/2}
 function arr(v){return Array.isArray(v)?v:[]}
 function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 function airdyneAmbiguous(t){return /air\s*dyne|airdyne/i.test(t)&&!/ad\s*[24567]|pro.?comp|evolution/i.test(t)}
 function lotLike(t,x){return /dumbbell|plate|bumper/i.test(t)||x?.valuation_mode==="lot_weight"||x?.valuation_mode==="hybrid"}
-function clearResult(){let o=$("#out");if(o)o.innerHTML=""}
+function selectEquipment(id){selectedEquipmentId=id||null;const x=C.find(x=>x.id===id);$("#title").value=x?x.brand+" "+x.model:"";clearResult();return x;}
+function clearResult(){evaluationVersion++;globalThis.GearKoalaValuation=undefined;let o=$("#out");if(o){delete o.dataset.valuation;o.innerHTML=""}}
+// Both entry pages use this one catalog picker. Selecting a suggestion records
+// the catalog ID; typing remains deliberately non-authoritative until it can
+// resolve to exactly one compatible model during evaluation.
+function bindCatalogSuggestions(containerSelector,onSelection){
+ const input=$("#title"),list=$(containerSelector);if(!input||!list)return;
+ const clear=()=>list.replaceChildren();
+ const render=(invalidate=true)=>{
+  selectedEquipmentId=null;if(invalidate)clearResult();clear();
+  const text=input.value.trim().toLowerCase();if(text.length<3)return;
+  for(const x of C.filter(x=>(x.brand+" "+x.model).toLowerCase().includes(text)).slice(0,7)){
+   const b=document.createElement("button");b.type="button";b.textContent=x.brand+" "+x.model;
+   b.onclick=()=>{selectEquipment(x.id);clear();onSelection?.(x);};list.append(b);
+  }
+ };
+ input.addEventListener("input",render);
+ input.addEventListener("keydown",e=>{if(e.key==="Escape")clear();});
+ input.addEventListener("blur",()=>setTimeout(()=>{if(!list.contains(document.activeElement))clear();},0));
+ // A user can begin typing before the asynchronous catalog arrives. Re-run the
+ // same renderer once it is ready instead of requiring a second keystroke.
+ // Do not invalidate an evaluation that is already awaiting the catalog: it
+ // can resolve a sufficiently specific direct entry without a suggestion.
+ catalogReady.then(()=>{if(input.value.trim().length>=3)render(false);});
+ return {clear,render};
+}
 // Model D was renamed RowErg; PM5 is a monitor, not proof of a frame model.
 // https://www.concept2.com/blog/the-rowerg-a-new-name-for-the-model-d-and-model-e
 function concept2Identity(text) {
@@ -37,7 +60,7 @@ function concept2Identity(text) {
  const model=(t.match(/\bmodel\s*([a-e])\b/)||[])[1]||null;
  const other=/ski\s*erg|bike\s*erg|dynamic|\bmodel\s*[abce]\b|\bd\s*\/\s*e\b|tall\s*(leg|seat)|20\s*(inch|in\b|["″])/.test(t);
  const rower=/row\s*erg|rower|rowing|\bmodel\s*[a-e]\b/.test(t);
- const accessory=/\b(monitor|seat|chain|handle|parts?|replacement)\s*(only|replacement)\b|\b(monitor only|pm\s*5 only)\b/.test(t);
+ const accessory=unsafeItem(t)||/\b(monitor|seat|chain|handle|parts?|replacement)\s*(only|replacement)\b|\b(monitor only|pm\s*5 only)\b/.test(t);
  return {rower:rower&&!other&&!accessory,excluded:other||accessory,model:model==="d"?"model-d":/row\s*erg/.test(t)?"rowerg":null,monitor};
 }
 function concept2Record(x) {
@@ -46,6 +69,8 @@ function concept2Record(x) {
 }
 function concept2Match(raw) {
  const identity=concept2Identity(raw);
+ // Current RowErg ships with PM5; a generic Model D/rower does not identify its monitor.
+ if(identity?.model==="rowerg"&&!identity.monitor)identity.monitor="5";
  if(!identity?.rower) return null;
  const rows=C.filter(x=>concept2Record(x)?.rower);
  const preferred=identity.model==="model-d" ? `model d${identity.monitor?" pm"+identity.monitor:""}` : "rowerg";
@@ -60,8 +85,8 @@ function soldPrice(c) {
 }
 function verifiedSale(c) {
  return c.listing_status==="sold"&&c.verification_status==="verified"&&c.is_bundle===false&&
-  !/\bnew\b|unused|parts only|not working|broken/i.test(`${c.condition||""} ${c.title||""}`)&&
-  ["exact_model","model_family","exact","family"].includes(c.match_type)&&
+  !/\bnew\b|unused|parts only|not working|broken/i.test(`${c.condition||""} ${c.title||""}`.replace(/like[ -]new/gi,"used"))&&
+  ["exact_model","model_family","exact","family","model"].includes(c.match_type)&&
   (!c.currency||c.currency==="USD")&&soldPrice(c)>0;
 }
 function saleKey(c) {
@@ -111,53 +136,187 @@ async function concept2Evidence(match) {
  return concept2Comps(match,all);
 }
 
-async function evaluate(){
- await catalogReady;
- let raw=$("#title").value.trim(),p=num($("#price").value);
- if(!raw){$("#out").innerHTML='<div class="needs-data"><b>Tell GearKoala what the item is first.</b><p>A broad description is fine — exact model is optional.</p></div>';return}
- if(!p){$("#out").innerHTML='<div class="needs-data"><b>We still need the price.</b><p>If you pasted a listing and GearKoala could not read the current bid or asking price, enter it above.</p></div>';return}
- if(airdyneAmbiguous(raw)){
-   let opts=C.filter(x=>x.brand==="Schwinn"&&/Airdyne/i.test(x.model));
-   $("#out").innerHTML=`<div class="identify"><span class="result-kicker">MODEL CHECK</span><h3>Which Airdyne is this?</h3><p>This one matters: Airdyne generations have different drivetrains and values.</p><div class="idgrid">${opts.slice(0,6).map(x=>`<button class="idchoice" data-model="${esc(x.brand+" "+x.model)}"><b>${esc(x.model)}</b><span>${esc((x.gear_brief||x.short_description||"").slice(0,115))}</span></button>`).join("")}</div></div>`;
-   document.querySelectorAll(".idchoice").forEach(b=>b.onclick=()=>{$("#title").value=b.dataset.model;evaluate()});return;
- }
- let match=concept2Match(raw),x=match?.x||exactFind(raw),comps=[],evidenceLevel="";
- if(match){try{const evidence=await concept2Evidence(match);comps=evidence.comps;evidenceLevel=evidence.level;}catch(e){}}
- else if(x){try{comps=await api(`market_observations?equipment_id=eq.${x.id}&select=observed_price,normalized_price,listing_status,observed_at,condition,source,match_type,match_confidence,is_bundle,verification_status&order=observed_at.desc&limit=50`)}catch(e){}}
- let comparable=match?comps:comps.filter(c=>c.listing_status==="sold"&&!c.is_bundle&&!/new/i.test(c.condition||"")&&(c.match_type==="exact_model"||c.match_type==="model_family")&&c.verification_status==="verified");
- let total=num($("#totalWeight")?.value), pp=total?p/total:0;
- // Lot-based gear: show useful math, but do not fake a benchmark/score until evidence exists.
- if(lotLike(raw,x) && comparable.length<3){
-   let name=x?`${x.brand} · ${x.model}`:"Generic / unknown gear";
-   $("#out").innerHTML=`<div class="resulttop unscored"><div><span class="result-kicker">${esc(name)}</span><h3>Deal math <small>not scored yet</small></h3></div><strong class="verdict">MORE MARKET DATA NEEDED</strong></div>
-   <div class="price-strip"><div><span>PRICE</span><b>${money(p)}</b></div><div><span>TOTAL WEIGHT</span><b>${total?total+" lb":"add weight"}</b></div><div><span>PRICE / LB</span><b>${pp?"$"+pp.toFixed(2):"—"}</b></div></div>
-   ${x?`<div class="brief"><span>GEAR BRIEF</span><p>${esc(x.gear_brief||x.short_description||"")}</p>${x.market_note?`<em>${esc(x.market_note)}</em>`:""}</div>`:""}
-   <div class="evidence"><span>WHY THERE IS NO GRAB SCORE YET</span><b>GearKoala does not have enough verified sold evidence for this category.</b><p>Your ${pp?"$"+pp.toFixed(2)+"/lb":"lot"} math is real. A 65-point placeholder would not be.</p></div>`;return;
- }
- if(!x){
-   $("#out").innerHTML=`<div class="needs-data"><span class="result-kicker">PARTIAL IDENTIFICATION</span><b>We can work with this — but we don't have enough evidence to score it yet.</b><p>GearKoala did not find a confident catalog match for “${esc(raw)}.” Try a broader equipment type, add the brand/model if visible, or use Browse. We won't invent a Grab Score.</p></div>`;return;
- }
- let center=0,method="";
- if(comparable.length>=3){let prices=comparable.map(soldPrice).filter(Boolean);center=median(prices);method=`Market estimate · ${prices.length} verified comparable sold observations${evidenceLevel?" · "+evidenceLevel:""}`}
- else {
-   let rates={"air bike":.66,rower:.68,"ski erg":.68,bike:.70,"spin bike":.35,"indoor cycle":.35,"squat stand":.65,"power rack":.64,dumbbells:.58};
-   let anchor=match ? (match.identity.model==="rowerg"&&match.identity.monitor==="5" ? +x.current_new_price||+x.msrp||0 : 0) : +x.current_new_price||+x.msrp||0;
-   if(anchor){center=anchor*(rates[x.category]||.56)*+$("#condition").value;method="Reference estimate · MSRP/new-price anchored · sold comps still needed"}
- }
- if(!center){
-   $("#out").innerHTML=`<div class="resulttop unscored"><div><span class="result-kicker">${esc(match?.label||x.brand+" · "+x.model)}</span><h3>Matched <small>not scored yet</small></h3></div><strong class="verdict">MORE MARKET DATA NEEDED</strong></div>
-   <div class="brief"><span>GEAR BRIEF</span><p>${esc(x.gear_brief||x.short_description||"Product identified.")}</p>${x.market_note?`<em>${esc(x.market_note)}</em>`:""}</div>
-   <div class="evidence"><span>WHY THERE IS NO GRAB SCORE YET</span><b>Product identified, valuation evidence incomplete.</b><p>GearKoala needs verified sold comps or a trustworthy new-price anchor before it judges this deal.</p></div>`;return;
- }
- let ratio=p/center,score=Math.round(Math.max(20,Math.min(99,120-ratio*70))),v=ratio<=.67?"POUNCE":ratio<=.82?"WORTH GRABBING":ratio<=1.02?"FAIR":"PASS / NEGOTIATE";
- let sources=[...new Set(comparable.map(c=>c.source))],notes=arr(x.used_buy_notes);
- let matchNote=match ? `<p>${match.identity.model?"Model D / RowErg comparisons stay within the identified monitor generation.":"Family estimate, not an exact-model identification. Confirm the frame model before buying."} ${match.identity.monitor?"PM"+match.identity.monitor+" evidence only; older/unknown monitor generations are excluded.":"Monitor generation is unknown; add PM3, PM4 or PM5 to use generation-specific sales."}</p>` : "";
- let newContext=`<div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>REFERENCE RANGE</span><b>${money(center*.9)}–${money(center*1.1)}</b></div>${+x.current_new_price&&(!match||match.identity.model==="rowerg")?`<div><span>NEW</span><b>${money(+x.current_new_price)}</b></div>`:""}</div>`;
- $("#out").innerHTML=`<div class="resulttop"><div><span class="result-kicker">${esc(match?.label||x.brand+" · "+x.model)}</span><h3>${score} <small>Grab Score</small></h3></div><strong class="verdict">${v}</strong></div>${newContext}
- <div class="brief"><span>GEAR BRIEF</span><p>${esc(x.gear_brief||x.short_description||"Product profile is being built.")}</p>${x.market_note?`<em>${esc(x.market_note)}</em>`:""}</div>
- ${notes.length?`<div class="buycheck"><span>CHECK BEFORE YOU GRAB IT</span><ul>${notes.slice(0,5).map(n=>`<li>${esc(n)}</li>`).join("")}</ul></div>`:""}
- <div class="evidence"><span>WHY THIS SCORE</span><b>${esc(method)}</b>${matchNote}<p>${comparable.length?`${comparable.length} usable sold comps${sources.length?` · ${sources.join(" + ")}`:""}`:"This score uses a product-price anchor and is labeled accordingly."}</p></div>`;
+function conditionClass(text){
+ const t=String(text||"").toLowerCase();
+ if(!t||/unknown|not tested|untested|as.is|needs|broken|damage|not working|does not|sticks|parts|unusable/i.test(t))return null;
+ if(/like[ -]new|excellent|barely used|gently used/.test(t))return "excellent";
+ if(/\bnew\b|unused|open box/.test(t))return null;
+ if(/fair|heavy wear/.test(t))return "fair";
+ if(/good|normal wear|tested.*working|fully functional/.test(t))return "good";
+ return null;
 }
-$("#go").onclick=evaluate;
-["title","price","condition","lotQty","unitWeight","totalWeight","listingUrl"].forEach(id=>{let el=$("#"+id);if(el)el.addEventListener("input",clearResult)});
+// Sale provenance can be an individual URL, a catalog plus explicit lot ID,
+// or a verified buyer attestation. A URL whitelist is not a verification status.
+function saleIdentity(c){
+ let u;try{u=new URL(c.listing_url);if(u.protocol!=="https:"||u.username||u.password)return null;}catch{}
+ const source=String(c.source||"Unknown source"),host=u?.hostname.replace(/^www\./,"").replace(/^prod-seo\./,"");
+ if(u){
+  const lot=u.pathname.match(/\/lot\/(\d+)/),asset=u.pathname.match(/\/asset\/(\d+\/\d+)/);
+  const catalog=/catalog|bidgallery/i.test(u.pathname);
+  if(catalog&&!c.source_listing_id)return null;
+  const key=asset?host+":asset:"+asset[1]:lot?host+":lot:"+lot[1]:catalog?host+":id:"+String(c.source_listing_id).replace(/-lot-?/i,"-"):u.origin+u.pathname.replace(/\/$/,"");
+  return {key,source,url:u.href,catalog,attested:false};
+ }
+ const raw=c.raw_payload;
+ if(c.transaction_type==="private_party_sale"&&raw?.evidence_type==="buyer_attestation_plus_marketplace_sold_screenshot"&&Number(raw.actual_transaction_price)===soldPrice(c))return {key:"attestation:"+c.id,source,url:null,attested:true};
+ return null;
+}
+function saleDate(c){return Date.parse(c.sold_at||c.observed_at);}
+function saleCondition(c){return conditionClass(c.condition);}
+function usableSale(c){
+ return verifiedSale(c)&&c.currency==="USD"&&["auction_sale","auction_sold","auction","completed_sale","private_party_sale"].includes(c.transaction_type)&&
+  !unsafeItem(c.title||"")&&!/untested|not tested|inoperative|broken|damaged|not working|does not work|needs (work|repair)|parts only/i.test(c.condition||"")&&!!saleIdentity(c);
+}
+function uniqueSales(rows){
+ const byKey=new Map(),conflicts=new Set();
+ // Prefer an individual lot over a catalog copy of the same sale.
+ const ordered=[...rows].sort((a,b)=>Number(saleIdentity(a).catalog)-Number(saleIdentity(b).catalog));
+ for(const c of ordered){
+  const id=saleIdentity(c),prev=byKey.get(id.key);
+  if(prev&&soldPrice(prev)!==soldPrice(c)){conflicts.add(id.key);continue;}
+  if(prev){if(!prev.sold_at&&c.sold_at)byKey.set(id.key,{...prev,sold_at:c.sold_at});continue;}
+  const duplicate=[...byKey.values()].some(p=>{
+   const other=saleIdentity(p),sameDay=Math.abs(saleDate(p)-saleDate(c))<=36*3600000;
+   // A catalog copy can have a different ID/date from its individual lot page.
+   const title=t=>normalized(t).replace(/\blot \d+\b/g,"").trim();
+   return id.source===other.source&&(id.catalog||other.catalog)&&sameDay&&soldPrice(p)===soldPrice(c)&&title(p.title)===title(c.title);
+  });
+  if(!duplicate)byKey.set(id.key,c);
+ }
+ return [...byKey.entries()].filter(([key])=>!conflicts.has(key)).map(([,c])=>c);
+}
+function reliableEvidence(rows,x,match,condition,now=Date.now(),query=""){
+ const usable=uniqueSales(rows.filter(c=>usableSale(c)&&(!Number.isFinite(saleDate(c))||saleDate(c)<=now)));
+ let candidates,level="same catalog model";
+ if(match){const selected=concept2Comps(match,usable);candidates=selected.comps;level=selected.level;}
+ else candidates=usable.filter(c=>modelFits(c.title,x));
+ // A catalog record can represent a product line, not proof of a generation.
+ const requestedGeneration=(query.match(/\bv(?:ersion)?\s*(\d+(?:\.\d+)?)\b/i)||[])[1];
+ if(requestedGeneration)candidates=candidates.filter(c=>Number((c.title.match(/\bv(?:ersion)?\s*(\d+(?:\.\d+)?)\b/i)||[])[1])===Number(requestedGeneration));
+ const generationUnconfirmed=!match&&/^v\d/i.test(x.generation||"")&&candidates.some(c=>! /\bv(?:ersion)?\s*\d/i.test(c.title));
+ if(generationUnconfirmed)level="same named product · generation unconfirmed";
+ // Recent evidence is preferred when sufficient, but missing a sale date or a
+ // condition adjective does not turn verified sale evidence into no evidence.
+ const recent=candidates.filter(c=>Number.isFinite(saleDate(c))&&now-saleDate(c)<=365*86400000);
+ const comps=recent.length>=3?recent:candidates;
+ const prices=comps.map(soldPrice).sort((a,b)=>a-b),center=prices.length?median(prices):0;
+ const low=prices[Math.floor((prices.length-1)*.25)],high=prices[Math.ceil((prices.length-1)*.75)];
+ const sources=new Set(comps.map(c=>saleIdentity(c).source));
+ const dated=comps.every(c=>c.sold_at&&now-Date.parse(c.sold_at)<=365*86400000);
+ const conditionKnown=comps.every(c=>saleCondition(c)===condition);
+ const exactIdentity=!match||(!!match.identity.model&&!!match.identity.monitor);
+ // Valuation and a purchase recommendation are separate decisions. Limited,
+ // historical or mixed-condition evidence still gives useful labeled context.
+ const enough=comps.length>=3&&low>0&&high/low<=2;
+ const canRecommend=enough&&sources.size>=2&&dated&&conditionKnown&&exactIdentity&&!generationUnconfirmed&&comps.every(c=>!saleIdentity(c).attested);
+ // A small credible sample can support direction without a Grab Score or POUNCE.
+ // Preserve identity/provenance gates; only allow a bounded, recent sample with
+ // known working conditions no more than one grade from the user's selection.
+ const grades={fair:0,good:1,excellent:2};
+ const nearCondition=comps.every(c=>saleCondition(c)&&Math.abs(grades[saleCondition(c)]-grades[condition])<=1);
+ const recentContext=comps.every(c=>Number.isFinite(saleDate(c))&&now-saleDate(c)<=365*86400000);
+ const publicSale=comps.some(c=>!saleIdentity(c).attested&&c.sold_at);
+ const directional=comps.length>=2&&sources.size>=2&&prices.at(-1)/prices[0]<=2&&exactIdentity&&nearCondition&&recentContext&&publicSale;
+ return {comps,enough,canRecommend,directional,generationUnconfirmed,low,high,center,level,conditionKnown,dated,sources:sources.size,asking:askingEvidence(rows,x)};
+}
+function askingEvidence(rows,x){
+ const seen=new Set(),items=[];
+ for(const c of rows){
+  const isAsk=["private_party_asking","private_ask"].includes(c.transaction_type)&&["active","ended","sold"].includes(c.listing_status)&&["asking_verified","verified"].includes(c.verification_status);
+  const isV2=/\bv\s*2(?:\.0)?\b/i.test(c.title||"");
+  if(!isAsk||c.is_bundle||!soldPrice(c)||c.currency!=="USD"||unsafeItem(c.title||"")||!modelFits(c.title||"",x)||(/^v3/i.test(x.generation||"")&&isV2))continue;
+  const key=c.source_listing_id||String(c.listing_url||"").split(/[?#]/)[0]||c.id;if(seen.has(key))continue;seen.add(key);items.push(c);
+ }
+ const prices=items.map(soldPrice).sort((a,b)=>a-b);
+ return {items,count:items.length,low:prices[0]||0,high:prices.at(-1)||0,median:prices.length?median(prices):0,active:items.filter(c=>c.listing_status==="active").length,ended:items.filter(c=>c.listing_status!=="active").length};
+}
+function evidenceList(ev){return `<ul class="sale-evidence">${ev.comps.map(c=>{
+ const id=saleIdentity(c),date=c.sold_at?"sold "+c.sold_at.slice(0,10):c.observed_at?"recorded "+c.observed_at.slice(0,10)+" · sale date unknown":"sale date unknown";
+ const kind=id.attested?"BUYER-ATTESTED TRANSACTION":/auction/.test(c.transaction_type)?"PUBLIC AUCTION RESULT":"PUBLIC SALE RECORD";
+ const detail=id.attested?"Buyer-reported paid price + sold screenshot; no public listing. Not independently source-verifiable.":/auction/.test(c.transaction_type)?"Published final bid; buyer premium, tax and transport may be additional.":"Public listing source recorded with this sale.";
+ const text=esc(id.source)+" · "+esc(date)+" · "+money(soldPrice(c));
+ return `<li class="${id.attested?"attested-sale":"public-sale"}"><strong class="provenance-label">${kind}</strong>${id.url?`<a href="${esc(id.url)}" target="_blank" rel="noopener noreferrer">${text}</a>`:text}<span class="provenance-detail">${detail}</span><span>${esc(c.condition||"condition not recorded")}</span></li>`;
+ }).join("")}</ul>`;}
+function directionalAssessment(p,ev){
+ const verdict=p<=ev.low?"POTENTIALLY GOOD PRICE":p<=ev.high?"WITHIN OBSERVED RANGE":"LOOKS HIGH VS SALES";
+ const difference=Math.round(Math.abs(p/ev.center-1)*100);
+ return {verdict,explanation:`${money(p)} is ${difference?difference+"% "+(p<ev.center?"below":"above"):"equal to"} the ${money(ev.center)} sample median${p===ev.low?" and matches the lowest recorded sale":""}. This is a directional comparison, not a reliable discount or savings estimate.`};
+}
+// This is the sole valuation decision used by both the homepage and Deal
+// Checker. Surface scripts may choose where to place the returned markup, but
+// never re-filter sales or recompute a price/score.
+function valuationDecision(x,p,ev,condition){
+ if(!ev.comps.length)return {confidence:"low",verdict:"NO DEAL VERDICT",headline:"Reference estimate",direction:null};
+ const signal=ev.comps.length>=8&&ev.sources>=2?"STRONG MARKET SIGNAL":ev.comps.length>=3?"GOOD MARKET SIGNAL":ev.directional?"LIMITED MARKET SIGNAL":"EARLY MARKET SIGNAL";
+ if(ev.comps.length>=3){const ratio=p/ev.center,score=grabScore(ratio),verdict=ratio<=.67?"POUNCE":ratio<=.82?"WORTH GRABBING":ratio<=1.02?"FAIR":"PASS / NEGOTIATE";return {confidence:"scored",signal,verdict,headline:`${score} <small>Grab Score</small>`,direction:null,score};}
+ const direction=ev.directional?directionalAssessment(p,ev):null;
+ return {confidence:direction?"limited":"early",signal,verdict:direction?.verdict||"NO DEAL VERDICT",headline:direction?"Market direction":"Market evidence incomplete",direction};
+}
+function grabScore(ratio){
+ // Anchors align numerical interpretation with verdict tiers: 0→99, .67→85,
+ // .82→70, 1.0→58, 1.02→50, then declining for increasingly overpriced listings.
+ const lerp=(a,b,t)=>a+(b-a)*t;
+ let score=ratio<=.67?lerp(99,85,ratio/.67):ratio<=.82?lerp(85,70,(ratio-.67)/.15):ratio<=1?lerp(70,58,(ratio-.82)/.18):ratio<=1.02?lerp(58,50,(ratio-1)/.02):50-80*(ratio-1.02);
+ return Math.round(Math.max(20,Math.min(99,score)));
+}
+function valuationSnapshot(label,x,p,ev,decision){
+ return {productId:x.id,label,asking:p,transactionIds:ev.comps.map(c=>c.id),compCount:ev.comps.length,range:[ev.low,ev.high],median:ev.center,askingTransactionIds:ev.asking.items.map(c=>c.id),askingCount:ev.asking.count,askingRange:[ev.asking.low,ev.asking.high],askingMedian:ev.asking.median,confidence:decision.confidence,signal:decision.signal,score:decision.score||null,verdict:decision.verdict};
+}
+function publishValuation(snapshot){
+ globalThis.GearKoalaValuation=Object.freeze(snapshot);
+ const out=$("#out");if(out)out.dataset.valuation=JSON.stringify(snapshot);
+}
+function renderValuation(label,x,p,ev,condition,decision=valuationDecision(x,p,ev,condition)){
+ const hasSales=ev.comps.length>0;
+ if(!hasSales){
+  const retail=Number(x.current_new_price||x.msrp),rates={"air bike":.66,rower:.68,"power rack":.64,"squat stand":.65};
+  const rate=rates[String(x.category).toLowerCase()];
+  if(!retail||!rate)return abstain(label,"Product identified. No compatible verified sold observations are available yet.",x);
+  const factor={excellent:1,good:.93,fair:.82}[condition]||1,center=retail*rate*factor;
+  return `<div class="resulttop unscored"><div><span class="result-kicker">${esc(label)}</span><h3>Reference estimate</h3></div><strong class="verdict">NO DEAL VERDICT</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>RETAIL-BASED REFERENCE · NOT SOLD VALUE</span><b>${money(center*.9)}–${money(center*1.1)}</b></div><div><span>CATALOG NEW PRICE</span><b>${money(retail)}</b></div></div><div class="evidence"><b>0 eligible sold observations · low confidence</b><p>This rough reference uses the catalog new price × ${Math.round(rate*100)}% category factor × ${factor} condition factor. It is not a verified market valuation and cannot justify a purchase recommendation. Confirm the exact configuration and compare actual sales before buying.</p><p>${esc(x.gear_brief||x.short_description||"")}</p></div>`;
+ }
+ const {headline,verdict,direction}=decision;
+ return `<div class="resulttop ${decision.confidence==="scored"?"":"unscored"}"><div><span class="result-kicker">${esc(label)}</span><h3>${headline}</h3></div><strong class="verdict">${verdict}</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>${ev.enough?"MIDDLE HALF OF OBSERVED SALES":"OBSERVED SALE RANGE"}</span><b>${money(ev.low)}–${money(ev.high)}</b></div><div><span>MEDIAN SOLD PRICE</span><b>${money(ev.center)}</b></div></div><div class="evidence"><b>${esc(decision.signal)} · ${ev.comps.length} eligible sold observations · ${esc(ev.level)} · USD</b><p>${decision.confidence==="scored"?"Verified compatible sales support this market comparison.":(direction?direction.explanation+" Confirm condition and configuration before acting. ":"Value evidence, not a purchase recommendation. ")+(ev.comps.length<3?"Small sample. ":"")+(ev.conditionKnown?"":"Reported conditions vary or are incomplete; this is not a condition-adjusted valuation. ")+(ev.dated?"":"Some sale dates are unavailable or historical. ")+(matchFamilyLabel(ev)?"Confirm the frame/configuration before applying this range. ":"")}</p><p>Inspect the equipment and account for auction fees, transport and local market differences.</p>${evidenceList(ev)}</div>${askingContext(ev)}`;
+}
+function askingContext(ev){const a=ev.asking;if(!a?.count)return "";return `<section class="asking-context"><strong>ASKING MARKET CONTEXT</strong><p>${a.count} comparable asking observations · ${money(a.low)}–${money(a.high)} · median ${money(a.median)}${a.active?` · ${a.active} active`:""}${a.ended?` · ${a.ended} ended asking listings`:""}</p><small>Asking prices are not completed sale prices. They do not affect the verified sold range, median, confidence, or deal assessment.</small></section>`}
+function matchFamilyLabel(ev){return /family/.test(ev.level);}
+async function observationsFor(ids){let all=[];for(let offset=0;offset<10000;){const page=await api(`market_observations?equipment_id=in.(${ids.join(",")})&select=*&order=observed_at.desc,id.asc&limit=500&offset=${offset}`);all.push(...page);if(!page.length)return all;offset+=page.length;}throw Error("Evidence limit reached");}
+function abstain(label,reason,x){return `<div class="resulttop unscored"><div><span class="result-kicker">${esc(label)}</span><h3>Not scored</h3></div><strong class="verdict">MORE INFORMATION NEEDED</strong></div><div class="evidence"><b>I can’t value this reliably.</b><p>${esc(reason)}</p>${x?`<p>${esc(x.gear_brief||x.short_description||"")}</p>`:""}${+x?.current_new_price?`<p>Catalog retail reference: ${money(+x.current_new_price)}. This is not a used-value estimate or purchase recommendation.</p>`:""}</div>`;}
+async function evaluate(){
+ const version=++evaluationVersion;await catalogReady;if(version!==evaluationVersion)return;
+ const raw=$("#title").value.trim(),p=parsePrice($("#price").value),out=$("#out");
+ if(!raw){out.innerHTML=abstain("IDENTIFICATION NEEDED","Enter the brand and model, or choose a model in Browse.");return;}
+ if(!p){out.innerHTML=abstain("CHECK THE PRICE","Enter a positive USD price, such as 350 or 1,250.50. Negative values and shorthand are not accepted.");return;}
+ if(!catalogAvailable){out.innerHTML=abstain("DATA UNAVAILABLE","The catalog could not be loaded. Please try again later.");return;}
+ if(unsafeItem(raw)){out.innerHTML=abstain("ITEM NEEDS REVIEW","Parts, accessories, bundles, damaged or untested equipment need separate identification and evidence. No complete-machine recommendation is generated.");return;}
+ const selected=C.find(x=>x.id===selectedEquipmentId&&raw===x.brand+" "+x.model);
+ const match=concept2Match(raw),x=selected||exactFind(raw);
+ if(!x){out.innerHTML=abstain("IDENTIFICATION UNCERTAIN","I can’t identify this reliably. Confirm the brand, exact model and equipment type, or select the model in Browse. Similar words are not enough to establish compatibility.");return;}
+ const label=match?.label||x.brand+" · "+x.model;
+ if(match&&!match.identity.monitor){
+  out.innerHTML='<div class="needs-data">Checking monitor-specific sale ranges…</div>';
+  let rows;try{rows=await observationsFor(match.rows.map(x=>x.id));}catch{if(version===evaluationVersion)out.innerHTML=abstain(label,"Sold evidence could not be loaded.",x);return;}
+  if(version!==evaluationVersion)return;
+  const options=["3","4","5"].map(pm=>{const m=concept2Match("Concept2 Model D PM"+pm),ev=reliableEvidence(rows,m.x,m,"good");return {pm,ev};}).filter(o=>o.ev.comps.length);
+  out.innerHTML=`<div class="identify"><span class="result-kicker">${esc(label)}</span><h3>Confirm the monitor</h3><p>Model D and RowErg identity is recognized. Different monitor generations have different values. These separate sale references are not a valuation of your unidentified configuration.</p><div class="idgrid">${options.map(({pm,ev})=>`<button type="button" class="idchoice" data-model="Concept2 Model D PM${pm}"><b>Model D / PM${pm}</b><span>${ev.comps.length} eligible sales · ${money(ev.low)}–${money(ev.high)} · median ${money(ev.center)}</span></button>`).join("")}</div><p>Read the PM number on the monitor and select it above, or add it to your search. No purchase verdict has been generated.</p></div>`;
+  document.querySelectorAll(".idchoice").forEach(b=>b.onclick=()=>{selectedEquipmentId=null;$("#title").value=b.dataset.model;evaluate();});return;
+ }
+ if(lotLike(raw,x)){const total=parsePrice($("#totalWeight")?.value);out.innerHTML=abstain(label,"Confirm pair/set configuration and total weight. Comparable lot evidence is not sufficiently validated to score this item.",x)+(total?`<div class="price-strip"><div><span>PRICE / LB · arithmetic only</span><b>$${(p/total).toFixed(2)}</b></div></div>`:"");return;}
+ out.innerHTML='<div class="needs-data">Checking compatible sold evidence…</div>';
+ let rows;try{const ids=match?match.rows.map(r=>r.id):C.filter(r=>normalized(r.brand+" "+r.model)===normalized(x.brand+" "+x.model)).map(r=>r.id);rows=await observationsFor(ids);}catch(e){if(version===evaluationVersion){console.warn("GearKoala: sold evidence unavailable");out.innerHTML=abstain(label,"Sold evidence could not be loaded. This is a data-availability failure, not an estimate.",x);}return;}
+ if(version!==evaluationVersion)return;
+ const condition={"1":"excellent",".93":"good",".82":"fair"}[$("#condition").value],ev=reliableEvidence(rows,x,match,condition,Date.now(),raw);
+ if(/\bv(?:ersion)?\s*\d/i.test(raw)&&!ev.comps.length){out.innerHTML=abstain(label,"No sold evidence confirms the requested generation. A different or unknown generation cannot establish its value.",x);return;}
+ const decision=valuationDecision(x,p,ev,condition);
+ publishValuation(valuationSnapshot(label,x,p,ev,decision));
+ out.innerHTML=renderValuation(label,x,p,ev,condition,decision);
+}
+$("#go").onclick=null;
+// A real form makes mouse, keyboard and mobile submit use the same flow.
+$("#dealForm").addEventListener("submit",async e=>{
+ e.preventDefault();const go=$("#go"),out=$("#out");go.disabled=true;out.setAttribute("aria-busy","true");
+ try{await evaluate();}catch(error){console.warn("GearKoala: evaluation failed");out.innerHTML=abstain("CHECK UNAVAILABLE","The check could not finish. Please try again.");}
+ finally{go.disabled=false;out.setAttribute("aria-busy","false");}
+});
+["price","condition","lotQty","unitWeight","totalWeight","listingUrl"].forEach(id=>{let el=$("#"+id);if(el)el.addEventListener("input",clearResult)});
 const catalogReady=load();

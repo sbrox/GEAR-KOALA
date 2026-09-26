@@ -41,8 +41,11 @@ footer{padding-top:28px;padding-bottom:28px}
 .range{border-top:1px solid #53615d;padding-top:18px;display:flex;justify-content:space-between;align-items:end}.range b{font-size:23px}.ticks{display:flex;gap:5px;margin-top:19px}.ticks i{height:6px;flex:1;background:#4E8F5E}.ticks i:nth-last-child(-n+2){background:#F8F7F3}.hero-product p{font-size:9px;color:#9aa7a1;letter-spacing:.06em;margin:12px 0 0}
 .checker{border-radius:8px 32px 8px 32px;box-shadow:10px 10px 0 #e4ebe3;border-color:#cbd5cb}
 .metricrow{border:0;gap:8px}.metricrow div{background:#EEF4ED;padding:24px;border:0}.metricrow div:nth-child(2){transform:translateY(10px)}.metricrow div:nth-child(3){transform:translateY(-6px)}
-.data{position:relative}.data:before{content:"MARKET / 01";position:absolute;right:0;top:82px;font-size:9px;letter-spacing:.18em;color:#9aa7a1}
-@media(max-width:760px){.hero-product{transform:none;box-shadow:9px 9px 0 #B7D1BC}.metricrow div:nth-child(n){transform:none}.data:before{display:none}}
+.data{position:relative}.section-meta{display:flex;flex-direction:column;align-items:flex-end;gap:14px;flex-shrink:0}.market-id{font-size:9px;letter-spacing:.18em;color:#9aa7a1}.section-meta .beta{white-space:nowrap}
+@media(max-width:760px){.hero-product{transform:none;box-shadow:9px 9px 0 #B7D1BC}.metricrow div:nth-child(n){transform:none}.section-meta{flex-direction:row;justify-content:space-between;align-items:center;margin-bottom:18px}.section-meta .beta{margin-bottom:0}}
+/* The two signal labels are distinct: hold them in their own mobile row so
+   the market identifier cannot paint through the evidence badge. */
+@media(max-width:600px){.sectionhead .section-meta{position:static;display:grid;grid-template-columns:max-content max-content;width:100%;justify-content:space-between;column-gap:12px;align-items:center;margin:0 0 18px}.sectionhead .section-meta .beta{margin:0}}
 
 /* V9 proprietary GearKoala visual grammar */
 body{overflow-x:hidden}
@@ -245,3 +248,15 @@ header nav a:hover{color:#4E8F5E;transform:translateY(-1px)}
  .price-strip{grid-template-columns:minmax(0,1fr)}
  .hero-product{padding-right:20px}
 }
+
+/* Reliability and accessible small-screen navigation. */
+:focus-visible{outline:3px solid #28623b!important;outline-offset:3px}
+header{height:auto;min-height:80px;flex-wrap:wrap;gap:14px;padding-top:14px;padding-bottom:14px}
+header nav{flex-wrap:wrap}
+@media(max-width:760px){header nav a{display:inline-block}header nav{gap:12px;width:100%}footer{flex-wrap:wrap;gap:16px}footer>*{max-width:100%;min-width:0}.familyhead{flex-wrap:wrap;gap:8px}.familyhead h2{overflow-wrap:anywhere}}
+.evidence a{overflow-wrap:anywhere}.resulttop>*{min-width:0}.suggestions button:focus-visible{outline-offset:-3px}
+.asking-context{margin-top:16px;padding:16px 18px;border:1px solid #d8ded7;border-radius:12px;background:#f5f7f3}.asking-context strong{font-size:10px;letter-spacing:.12em;color:#51645a}.asking-context p{margin:7px 0;font-weight:700}.asking-context small{display:block;color:#68766f;line-height:1.45}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;scroll-behavior:auto!important;transition:none!important}}
+
+/* Provenance labels describe different evidence mechanisms, not equal badges. */
+.sale-evidence{padding-left:20px}.sale-evidence li{margin:16px 0;line-height:1.55}.evidence .provenance-label{display:block;font-size:10px;letter-spacing:.06em}.provenance-detail{display:block;color:#66716b;font-size:12px}.attested-sale .provenance-label{color:#785b2b}.public-sale .provenance-label{color:#356146}#go:disabled{opacity:.65;cursor:wait}
