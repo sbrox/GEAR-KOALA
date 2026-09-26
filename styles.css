@@ -255,6 +255,7 @@ header{height:auto;min-height:80px;flex-wrap:wrap;gap:14px;padding-top:14px;padd
 header nav{flex-wrap:wrap}
 @media(max-width:760px){header nav a{display:inline-block}header nav{gap:12px;width:100%}footer{flex-wrap:wrap;gap:16px}footer>*{max-width:100%;min-width:0}.familyhead{flex-wrap:wrap;gap:8px}.familyhead h2{overflow-wrap:anywhere}}
 .evidence a{overflow-wrap:anywhere}.resulttop>*{min-width:0}.suggestions button:focus-visible{outline-offset:-3px}
+.asking-context{margin-top:16px;padding:16px 18px;border:1px solid #d8ded7;border-radius:12px;background:#f5f7f3}.asking-context strong{font-size:10px;letter-spacing:.12em;color:#51645a}.asking-context p{margin:7px 0;font-weight:700}.asking-context small{display:block;color:#68766f;line-height:1.45}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;scroll-behavior:auto!important;transition:none!important}}
 
 /* Provenance labels describe different evidence mechanisms, not equal badges. */

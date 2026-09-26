@@ -217,7 +217,18 @@ function reliableEvidence(rows,x,match,condition,now=Date.now(),query=""){
  const recentContext=comps.every(c=>Number.isFinite(saleDate(c))&&now-saleDate(c)<=365*86400000);
  const publicSale=comps.some(c=>!saleIdentity(c).attested&&c.sold_at);
  const directional=comps.length>=2&&sources.size>=2&&prices.at(-1)/prices[0]<=2&&exactIdentity&&nearCondition&&recentContext&&publicSale;
- return {comps,enough,canRecommend,directional,generationUnconfirmed,low,high,center,level,conditionKnown,dated,sources:sources.size};
+ return {comps,enough,canRecommend,directional,generationUnconfirmed,low,high,center,level,conditionKnown,dated,sources:sources.size,asking:askingEvidence(rows,x)};
+}
+function askingEvidence(rows,x){
+ const seen=new Set(),items=[];
+ for(const c of rows){
+  const isAsk=["private_party_asking","private_ask"].includes(c.transaction_type)&&["active","ended","sold"].includes(c.listing_status)&&["asking_verified","verified"].includes(c.verification_status);
+  const isV2=/\bv\s*2(?:\.0)?\b/i.test(c.title||"");
+  if(!isAsk||c.is_bundle||!soldPrice(c)||c.currency!=="USD"||unsafeItem(c.title||"")||!modelFits(c.title||"",x)||(/^v3/i.test(x.generation||"")&&isV2))continue;
+  const key=c.source_listing_id||String(c.listing_url||"").split(/[?#]/)[0]||c.id;if(seen.has(key))continue;seen.add(key);items.push(c);
+ }
+ const prices=items.map(soldPrice).sort((a,b)=>a-b);
+ return {items,count:items.length,low:prices[0]||0,high:prices.at(-1)||0,median:prices.length?median(prices):0,active:items.filter(c=>c.listing_status==="active").length,ended:items.filter(c=>c.listing_status!=="active").length};
 }
 function evidenceList(ev){return `<ul class="sale-evidence">${ev.comps.map(c=>{
  const id=saleIdentity(c),date=c.sold_at?"sold "+c.sold_at.slice(0,10):c.observed_at?"recorded "+c.observed_at.slice(0,10)+" · sale date unknown":"sale date unknown";
@@ -243,7 +254,7 @@ function valuationDecision(x,p,ev,condition){
  return {confidence:ev.canRecommend?"high":direction?"low":"limited",verdict,headline,direction};
 }
 function valuationSnapshot(label,x,p,ev,decision){
- return {productId:x.id,label,asking:p,transactionIds:ev.comps.map(c=>c.id),compCount:ev.comps.length,range:[ev.low,ev.high],median:ev.center,confidence:decision.confidence,verdict:decision.verdict};
+ return {productId:x.id,label,asking:p,transactionIds:ev.comps.map(c=>c.id),compCount:ev.comps.length,range:[ev.low,ev.high],median:ev.center,askingTransactionIds:ev.asking.items.map(c=>c.id),askingCount:ev.asking.count,askingRange:[ev.asking.low,ev.asking.high],askingMedian:ev.asking.median,confidence:decision.confidence,verdict:decision.verdict};
 }
 function publishValuation(snapshot){
  globalThis.GearKoalaValuation=Object.freeze(snapshot);
@@ -259,10 +270,11 @@ function renderValuation(label,x,p,ev,condition,decision=valuationDecision(x,p,e
   return `<div class="resulttop unscored"><div><span class="result-kicker">${esc(label)}</span><h3>Reference estimate</h3></div><strong class="verdict">NO DEAL VERDICT</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>RETAIL-BASED REFERENCE · NOT SOLD VALUE</span><b>${money(center*.9)}–${money(center*1.1)}</b></div><div><span>CATALOG NEW PRICE</span><b>${money(retail)}</b></div></div><div class="evidence"><b>0 eligible sold observations · low confidence</b><p>This rough reference uses the catalog new price × ${Math.round(rate*100)}% category factor × ${factor} condition factor. It is not a verified market valuation and cannot justify a purchase recommendation. Confirm the exact configuration and compare actual sales before buying.</p><p>${esc(x.gear_brief||x.short_description||"")}</p></div>`;
  }
  const {headline,verdict,direction}=decision;
- return `<div class="resulttop ${ev.canRecommend?"":"unscored"}"><div><span class="result-kicker">${esc(label)}</span><h3>${headline}</h3></div><strong class="verdict">${verdict}</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>${ev.enough?"MIDDLE HALF OF OBSERVED SALES":"OBSERVED SALE RANGE"}</span><b>${money(ev.low)}–${money(ev.high)}</b></div><div><span>MEDIAN SOLD PRICE</span><b>${money(ev.center)}</b></div></div><div class="evidence"><b>${ev.comps.length} eligible sold observations · ${esc(ev.level)} · USD${direction?" · LOW CONFIDENCE":""}</b><p>${ev.canRecommend?"Matched condition and recent independent sales support this comparison.":(direction?direction.explanation+" Confirm condition and configuration before acting. ":"Value evidence, not a purchase recommendation. ")+(ev.comps.length<3?"Small sample. ":"")+(ev.conditionKnown?"":"Reported conditions vary or are incomplete; this is not a condition-adjusted valuation. ")+(ev.dated?"":"Some sale dates are unavailable or historical. ")+(matchFamilyLabel(ev)?"Confirm the frame/configuration before applying this range. ":"")}</p><p>Inspect the equipment and account for auction fees, transport and local market differences.</p>${evidenceList(ev)}</div>`;
+ return `<div class="resulttop ${ev.canRecommend?"":"unscored"}"><div><span class="result-kicker">${esc(label)}</span><h3>${headline}</h3></div><strong class="verdict">${verdict}</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>${ev.enough?"MIDDLE HALF OF OBSERVED SALES":"OBSERVED SALE RANGE"}</span><b>${money(ev.low)}–${money(ev.high)}</b></div><div><span>MEDIAN SOLD PRICE</span><b>${money(ev.center)}</b></div></div><div class="evidence"><b>${ev.comps.length} eligible sold observations · ${esc(ev.level)} · USD${direction?" · LOW CONFIDENCE":""}</b><p>${ev.canRecommend?"Matched condition and recent independent sales support this comparison.":(direction?direction.explanation+" Confirm condition and configuration before acting. ":"Value evidence, not a purchase recommendation. ")+(ev.comps.length<3?"Small sample. ":"")+(ev.conditionKnown?"":"Reported conditions vary or are incomplete; this is not a condition-adjusted valuation. ")+(ev.dated?"":"Some sale dates are unavailable or historical. ")+(matchFamilyLabel(ev)?"Confirm the frame/configuration before applying this range. ":"")}</p><p>Inspect the equipment and account for auction fees, transport and local market differences.</p>${evidenceList(ev)}</div>${askingContext(ev)}`;
 }
+function askingContext(ev){const a=ev.asking;if(!a?.count)return "";return `<section class="asking-context"><strong>ASKING MARKET CONTEXT</strong><p>${a.count} comparable asking observations · ${money(a.low)}–${money(a.high)} · median ${money(a.median)}${a.active?` · ${a.active} active`:""}${a.ended?` · ${a.ended} ended asking listings`:""}</p><small>Asking prices are not completed sale prices. They do not affect the verified sold range, median, confidence, or deal assessment.</small></section>`}
 function matchFamilyLabel(ev){return /family/.test(ev.level);}
-async function observationsFor(ids){let all=[];for(let offset=0;offset<10000;){const page=await api(`market_observations?equipment_id=in.(${ids.join(",")})&listing_status=eq.sold&verification_status=eq.verified&select=*&order=sold_at.desc,id.asc&limit=500&offset=${offset}`);all.push(...page);if(!page.length)return all;offset+=page.length;}throw Error("Evidence limit reached");}
+async function observationsFor(ids){let all=[];for(let offset=0;offset<10000;){const page=await api(`market_observations?equipment_id=in.(${ids.join(",")})&select=*&order=observed_at.desc,id.asc&limit=500&offset=${offset}`);all.push(...page);if(!page.length)return all;offset+=page.length;}throw Error("Evidence limit reached");}
 function abstain(label,reason,x){return `<div class="resulttop unscored"><div><span class="result-kicker">${esc(label)}</span><h3>Not scored</h3></div><strong class="verdict">MORE INFORMATION NEEDED</strong></div><div class="evidence"><b>I can’t value this reliably.</b><p>${esc(reason)}</p>${x?`<p>${esc(x.gear_brief||x.short_description||"")}</p>`:""}${+x?.current_new_price?`<p>Catalog retail reference: ${money(+x.current_new_price)}. This is not a used-value estimate or purchase recommendation.</p>`:""}</div>`;}
 async function evaluate(){
  const version=++evaluationVersion;await catalogReady;if(version!==evaluationVersion)return;
