@@ -1,33 +1,31 @@
-const U="https://dyvzrboshanctbjiukvh.supabase.co",K="sb_publishable_ZKuyrkd9Rv7L-4HUXv_v-g_Ka5l9hSD";let C=[];const $=s=>document.querySelector(s),num=v=>Number(String(v||"").replace(/[^0-9.]/g,""))||0,money=n=>n?new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n):"—";
+const U="https://dyvzrboshanctbjiukvh.supabase.co",K="sb_publishable_ZKuyrkd9Rv7L-4HUXv_v-g_Ka5l9hSD";let C=[];const $=s=>document.querySelector(s),num=v=>parsePrice(v),money=n=>n?new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(n):"—";
 async function api(path){let r=await fetch(U+"/rest/v1/"+path,{headers:{apikey:K,Authorization:"Bearer "+K}});if(!r.ok)throw Error(r.status);return r.json()}
-async function load(){try{C=await api("equipment?select=*");if($("#status")){$("#status").textContent="● LIVE · "+C.length+" MODELS";$("#status").className="live";}let obs=await api("market_observations?select=id&limit=1000");$("#compStatus").textContent=`Market layer live · ${obs.length} observations`;$("#compStatus").className="compstatus livecomp"}catch(e){if($("#status")){$("#status").textContent="● DATABASE OFFLINE";$("#status").className="bad";}}}
-function tokens(s){return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim().split(/\s+/).filter(x=>x.length>1)}
-function scoreCandidate(t,x){
- let q=tokens(t), fields=[x.brand,x.model,x.category,x.subtype,x.equipment_family,...(x.aliases||[])].filter(Boolean).map(String);
- let hay=tokens(fields.join(" ")), set=new Set(hay), overlap=q.filter(z=>set.has(z)).length;
- let exact=fields.some(f=>String(t).toLowerCase().includes(f.toLowerCase())&&f.length>=5)?4:0;
- let generic=x.generic_match?0:1;
- return overlap*3+exact+generic;
+let catalogAvailable=false,evaluationVersion=0;
+async function load(){try{C=await api("equipment?select=*");catalogAvailable=true;if($("#status"))$("#status").textContent="● CATALOG · "+C.length+" MODELS";$("#compStatus").textContent="Catalog ready · sold evidence is checked per item";}catch(e){console.warn("GearKoala: catalog unavailable");if($("#status"))$("#status").textContent="● CATALOG UNAVAILABLE";$("#compStatus").textContent="Catalog unavailable. Please try again later.";}}
+function parsePrice(value){const s=String(value??"").trim().replace(/^\$\s*/,"");if(!/^(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(s))return 0;const n=Number(s.replace(/,/g,""));return Number.isFinite(n)&&n>0&&n<=10000000?n:0;}
+function normalized(s){return String(s||"").toLowerCase().replace(/concept\s*[- ]?2/g,"concept2").replace(/[^a-z0-9+]+/g," ").trim();}
+function containsPhrase(text,phrase){return (" "+normalized(text)+" ").includes(" "+normalized(phrase)+" ");}
+function unsafeItem(t){return /\b(replacement|spare|parts?|repair|broken|damaged|untested|bundle|lot of|versus|vs|replica|knockoff|compatible|fits)\b|not working|needs work|monitor only|chain only|seat only|handle only/i.test(t);}
+function modelFits(t,x){
+ if(!containsPhrase(t,x.brand)||!containsPhrase(t,x.model))return false;
+ // Bike and Bike+ (and unmentioned generations) must not collapse together.
+ if(/\bbike\b/i.test(x.model)&&!/\+|plus/i.test(x.model)&&/bike\s*(?:\+|plus)/i.test(t))return false;
+ const categories=[[/\b(treadmill|tredmill)\b/i,/treadmill|walking pad/i],[/\b(rower|rowing|waterrower)\b/i,/rower/i],[/\b(rack)\b/i,/rack|stand/i],[/\b(elliptical)\b/i,/elliptical|motion trainer|arc trainer/i]];
+ return !categories.some(([query,category])=>query.test(t)&&!category.test(x.category||""));
 }
-function candidates(t){return C.map(x=>({x,s:scoreCandidate(t,x)})).filter(o=>o.s>=4).sort((a,b)=>b.s-a.s)}
 function exactFind(t){
- let match=concept2Match(t);if(match)return match.x;
- let a=candidates(t),identity=concept2Identity(t);
- if(identity){
-  // A shared brand/PM5 token must not turn a SkiErg, BikeErg or older frame into a RowErg.
-  const kind=String(t).match(/ski\s*erg|bike\s*erg|dynamic|model\s*[abce]\b/i)?.[0];
-  if(!kind||/monitor only|pm\s*5 only/i.test(t))return null;
-  const key=kind.toLowerCase().replace(/\s+/g,"");
-  a=a.filter(({x})=>/concept\s*2/i.test(x.brand)&&x.model.toLowerCase().replace(/\s+/g,"").includes(key));
- }
- return a.length?a[0].x:null;
+ if(unsafeItem(t))return null;
+ const c2=concept2Match(t);if(c2)return c2.x;
+ const matches=C.filter(x=>!x.generic_match&&modelFits(t,x));
+ const keys=new Set(matches.map(x=>normalized(x.brand+" "+x.model)));
+ return keys.size===1?matches[0]||null:null;
 }
 function median(a){a=[...a].sort((x,y)=>x-y);let n=a.length;return n%2?a[(n-1)/2]:(a[n/2-1]+a[n/2])/2}
 function arr(v){return Array.isArray(v)?v:[]}
 function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 function airdyneAmbiguous(t){return /air\s*dyne|airdyne/i.test(t)&&!/ad\s*[24567]|pro.?comp|evolution/i.test(t)}
 function lotLike(t,x){return /dumbbell|plate|bumper/i.test(t)||x?.valuation_mode==="lot_weight"||x?.valuation_mode==="hybrid"}
-function clearResult(){let o=$("#out");if(o)o.innerHTML=""}
+function clearResult(){evaluationVersion++;let o=$("#out");if(o)o.innerHTML=""}
 // Model D was renamed RowErg; PM5 is a monitor, not proof of a frame model.
 // https://www.concept2.com/blog/the-rowerg-a-new-name-for-the-model-d-and-model-e
 function concept2Identity(text) {
@@ -37,7 +35,7 @@ function concept2Identity(text) {
  const model=(t.match(/\bmodel\s*([a-e])\b/)||[])[1]||null;
  const other=/ski\s*erg|bike\s*erg|dynamic|\bmodel\s*[abce]\b|\bd\s*\/\s*e\b|tall\s*(leg|seat)|20\s*(inch|in\b|["″])/.test(t);
  const rower=/row\s*erg|rower|rowing|\bmodel\s*[a-e]\b/.test(t);
- const accessory=/\b(monitor|seat|chain|handle|parts?|replacement)\s*(only|replacement)\b|\b(monitor only|pm\s*5 only)\b/.test(t);
+ const accessory=unsafeItem(t)||/\b(monitor|seat|chain|handle|parts?|replacement)\s*(only|replacement)\b|\b(monitor only|pm\s*5 only)\b/.test(t);
  return {rower:rower&&!other&&!accessory,excluded:other||accessory,model:model==="d"?"model-d":/row\s*erg/.test(t)?"rowerg":null,monitor};
 }
 function concept2Record(x) {
@@ -60,7 +58,7 @@ function soldPrice(c) {
 }
 function verifiedSale(c) {
  return c.listing_status==="sold"&&c.verification_status==="verified"&&c.is_bundle===false&&
-  !/\bnew\b|unused|parts only|not working|broken/i.test(`${c.condition||""} ${c.title||""}`)&&
+  !/\bnew\b|unused|parts only|not working|broken/i.test(`${c.condition||""} ${c.title||""}`.replace(/like[ -]new/gi,"used"))&&
   ["exact_model","model_family","exact","family"].includes(c.match_type)&&
   (!c.currency||c.currency==="USD")&&soldPrice(c)>0;
 }
@@ -111,52 +109,58 @@ async function concept2Evidence(match) {
  return concept2Comps(match,all);
 }
 
+function conditionClass(text){
+ const t=String(text||"").toLowerCase();
+ if(!t||/unknown|not tested|untested|as.is|needs|broken|damage|not working|does not|sticks|parts|unusable/i.test(t))return null;
+ if(/like[ -]new|excellent|barely used|gently used/.test(t))return "excellent";
+ if(/\bnew\b|unused|open box/.test(t))return null;
+ if(/fair|heavy wear/.test(t))return "fair";
+ if(/good|normal wear|tested.*working|fully functional/.test(t))return "good";
+ return null;
+}
+function saleIdentity(c){
+ try{const u=new URL(c.listing_url);if(u.protocol!=="https:")return null;let h=u.hostname.replace(/^www\./,"").replace(/^prod-seo\./,"");let m;
+ if((h==="hibid.com"||h.endsWith(".hibid.com"))&&(m=u.pathname.match(/\/lot\/(\d+)/)))return {key:"hibid:"+m[1],source:"HiBid",url:u.href};
+ if(h==="govdeals.com"&&(m=u.pathname.match(/\/asset\/(\d+\/\d+)/)))return {key:"govdeals:"+m[1],source:"GovDeals",url:u.href};
+ if(h==="maxsold.com"&&(m=u.pathname.match(/\/listing\/(\d+)/)))return {key:"maxsold:"+m[1],source:"MaxSold",url:u.href};
+ // Catalog links and seller pages are not individual sale provenance.
+ return null;}catch{return null;}
+}
+function reliableEvidence(rows,x,match,condition,now=Date.now()){
+ const seen=new Map();
+ for(const c of rows){
+  const identity=saleIdentity(c),date=Date.parse(c.sold_at),age=now-date;
+  if(!identity||!verifiedSale(c)||c.currency!=="USD"||!["auction_sale","completed_sale"].includes(c.transaction_type)||!Number.isFinite(date)||age<0||age>365*86400000||conditionClass(c.condition)!==condition||!["exact","exact_model"].includes(c.match_type)||!modelFits(c.title,x))continue;
+  if(match){const identity=concept2Identity(c.title);if(!match.identity.model||!match.identity.monitor||!identity?.rower||identity.monitor!==match.identity.monitor||identity.model!==match.identity.model)continue;}
+  if(seen.has(identity.key)){const prev=seen.get(identity.key);if(prev&&soldPrice(prev)!==soldPrice(c))seen.set(identity.key,null);}else seen.set(identity.key,c);
+ }
+ const comps=[...seen.values()].filter(Boolean),prices=comps.map(soldPrice).sort((a,b)=>a-b),sources=new Set(comps.map(c=>saleIdentity(c).source));
+ const low=prices[Math.floor((prices.length-1)*.25)],high=prices[Math.ceil((prices.length-1)*.75)];
+ const dates=new Set(comps.map(c=>c.sold_at.slice(0,10)));
+ const enough=comps.length>=5&&sources.size>=2&&dates.size>=2&&low>0&&high/low<=2;
+ return {comps,enough,low,high,center:enough?median(prices):0};
+}
+async function observationsFor(ids){let all=[];for(let offset=0;offset<10000;){const page=await api(`market_observations?equipment_id=in.(${ids.join(",")})&listing_status=eq.sold&verification_status=eq.verified&select=*&order=sold_at.desc,id.asc&limit=500&offset=${offset}`);all.push(...page);if(!page.length)return all;offset+=page.length;}throw Error("Evidence limit reached");}
+function abstain(label,reason,x){return `<div class="resulttop unscored"><div><span class="result-kicker">${esc(label)}</span><h3>Not scored</h3></div><strong class="verdict">MORE INFORMATION NEEDED</strong></div><div class="evidence"><b>I can’t value this reliably.</b><p>${esc(reason)}</p>${x?`<p>${esc(x.gear_brief||x.short_description||"")}</p>`:""}${+x?.current_new_price?`<p>Catalog retail reference: ${money(+x.current_new_price)}. This is not a used-value estimate or purchase recommendation.</p>`:""}</div>`;}
 async function evaluate(){
- await catalogReady;
- let raw=$("#title").value.trim(),p=num($("#price").value);
- if(!raw){$("#out").innerHTML='<div class="needs-data"><b>Tell GearKoala what the item is first.</b><p>A broad description is fine — exact model is optional.</p></div>';return}
- if(!p){$("#out").innerHTML='<div class="needs-data"><b>We still need the price.</b><p>If you pasted a listing and GearKoala could not read the current bid or asking price, enter it above.</p></div>';return}
- if(airdyneAmbiguous(raw)){
-   let opts=C.filter(x=>x.brand==="Schwinn"&&/Airdyne/i.test(x.model));
-   $("#out").innerHTML=`<div class="identify"><span class="result-kicker">MODEL CHECK</span><h3>Which Airdyne is this?</h3><p>This one matters: Airdyne generations have different drivetrains and values.</p><div class="idgrid">${opts.slice(0,6).map(x=>`<button class="idchoice" data-model="${esc(x.brand+" "+x.model)}"><b>${esc(x.model)}</b><span>${esc((x.gear_brief||x.short_description||"").slice(0,115))}</span></button>`).join("")}</div></div>`;
-   document.querySelectorAll(".idchoice").forEach(b=>b.onclick=()=>{$("#title").value=b.dataset.model;evaluate()});return;
- }
- let match=concept2Match(raw),x=match?.x||exactFind(raw),comps=[],evidenceLevel="";
- if(match){try{const evidence=await concept2Evidence(match);comps=evidence.comps;evidenceLevel=evidence.level;}catch(e){}}
- else if(x){try{comps=await api(`market_observations?equipment_id=eq.${x.id}&select=observed_price,normalized_price,listing_status,observed_at,condition,source,match_type,match_confidence,is_bundle,verification_status&order=observed_at.desc&limit=50`)}catch(e){}}
- let comparable=match?comps:comps.filter(c=>c.listing_status==="sold"&&!c.is_bundle&&!/new/i.test(c.condition||"")&&(c.match_type==="exact_model"||c.match_type==="model_family")&&c.verification_status==="verified");
- let total=num($("#totalWeight")?.value), pp=total?p/total:0;
- // Lot-based gear: show useful math, but do not fake a benchmark/score until evidence exists.
- if(lotLike(raw,x) && comparable.length<3){
-   let name=x?`${x.brand} · ${x.model}`:"Generic / unknown gear";
-   $("#out").innerHTML=`<div class="resulttop unscored"><div><span class="result-kicker">${esc(name)}</span><h3>Deal math <small>not scored yet</small></h3></div><strong class="verdict">MORE MARKET DATA NEEDED</strong></div>
-   <div class="price-strip"><div><span>PRICE</span><b>${money(p)}</b></div><div><span>TOTAL WEIGHT</span><b>${total?total+" lb":"add weight"}</b></div><div><span>PRICE / LB</span><b>${pp?"$"+pp.toFixed(2):"—"}</b></div></div>
-   ${x?`<div class="brief"><span>GEAR BRIEF</span><p>${esc(x.gear_brief||x.short_description||"")}</p>${x.market_note?`<em>${esc(x.market_note)}</em>`:""}</div>`:""}
-   <div class="evidence"><span>WHY THERE IS NO GRAB SCORE YET</span><b>GearKoala does not have enough verified sold evidence for this category.</b><p>Your ${pp?"$"+pp.toFixed(2)+"/lb":"lot"} math is real. A 65-point placeholder would not be.</p></div>`;return;
- }
- if(!x){
-   $("#out").innerHTML=`<div class="needs-data"><span class="result-kicker">PARTIAL IDENTIFICATION</span><b>We can work with this — but we don't have enough evidence to score it yet.</b><p>GearKoala did not find a confident catalog match for “${esc(raw)}.” Try a broader equipment type, add the brand/model if visible, or use Browse. We won't invent a Grab Score.</p></div>`;return;
- }
- let center=0,method="";
- if(comparable.length>=3){let prices=comparable.map(soldPrice).filter(Boolean);center=median(prices);method=`Market estimate · ${prices.length} verified comparable sold observations${evidenceLevel?" · "+evidenceLevel:""}`}
- else {
-   let rates={"air bike":.66,rower:.68,"ski erg":.68,bike:.70,"spin bike":.35,"indoor cycle":.35,"squat stand":.65,"power rack":.64,dumbbells:.58};
-   let anchor=match ? (match.identity.model==="rowerg"&&match.identity.monitor==="5" ? +x.current_new_price||+x.msrp||0 : 0) : +x.current_new_price||+x.msrp||0;
-   if(anchor){center=anchor*(rates[x.category]||.56)*+$("#condition").value;method="Reference estimate · MSRP/new-price anchored · sold comps still needed"}
- }
- if(!center){
-   $("#out").innerHTML=`<div class="resulttop unscored"><div><span class="result-kicker">${esc(match?.label||x.brand+" · "+x.model)}</span><h3>Matched <small>not scored yet</small></h3></div><strong class="verdict">MORE MARKET DATA NEEDED</strong></div>
-   <div class="brief"><span>GEAR BRIEF</span><p>${esc(x.gear_brief||x.short_description||"Product identified.")}</p>${x.market_note?`<em>${esc(x.market_note)}</em>`:""}</div>
-   <div class="evidence"><span>WHY THERE IS NO GRAB SCORE YET</span><b>Product identified, valuation evidence incomplete.</b><p>GearKoala needs verified sold comps or a trustworthy new-price anchor before it judges this deal.</p></div>`;return;
- }
- let ratio=p/center,score=Math.round(Math.max(20,Math.min(99,120-ratio*70))),v=ratio<=.67?"POUNCE":ratio<=.82?"WORTH GRABBING":ratio<=1.02?"FAIR":"PASS / NEGOTIATE";
- let sources=[...new Set(comparable.map(c=>c.source))],notes=arr(x.used_buy_notes);
- let matchNote=match ? `<p>${match.identity.model?"Model D / RowErg comparisons stay within the identified monitor generation.":"Family estimate, not an exact-model identification. Confirm the frame model before buying."} ${match.identity.monitor?"PM"+match.identity.monitor+" evidence only; older/unknown monitor generations are excluded.":"Monitor generation is unknown; add PM3, PM4 or PM5 to use generation-specific sales."}</p>` : "";
- let newContext=`<div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>REFERENCE RANGE</span><b>${money(center*.9)}–${money(center*1.1)}</b></div>${+x.current_new_price&&(!match||match.identity.model==="rowerg")?`<div><span>NEW</span><b>${money(+x.current_new_price)}</b></div>`:""}</div>`;
- $("#out").innerHTML=`<div class="resulttop"><div><span class="result-kicker">${esc(match?.label||x.brand+" · "+x.model)}</span><h3>${score} <small>Grab Score</small></h3></div><strong class="verdict">${v}</strong></div>${newContext}
- <div class="brief"><span>GEAR BRIEF</span><p>${esc(x.gear_brief||x.short_description||"Product profile is being built.")}</p>${x.market_note?`<em>${esc(x.market_note)}</em>`:""}</div>
- ${notes.length?`<div class="buycheck"><span>CHECK BEFORE YOU GRAB IT</span><ul>${notes.slice(0,5).map(n=>`<li>${esc(n)}</li>`).join("")}</ul></div>`:""}
- <div class="evidence"><span>WHY THIS SCORE</span><b>${esc(method)}</b>${matchNote}<p>${comparable.length?`${comparable.length} usable sold comps${sources.length?` · ${sources.join(" + ")}`:""}`:"This score uses a product-price anchor and is labeled accordingly."}</p></div>`;
+ const version=++evaluationVersion;await catalogReady;if(version!==evaluationVersion)return;
+ const raw=$("#title").value.trim(),p=parsePrice($("#price").value),out=$("#out");
+ if(!raw){out.innerHTML=abstain("IDENTIFICATION NEEDED","Enter the brand and model, or choose a model in Browse.");return;}
+ if(!p){out.innerHTML=abstain("CHECK THE PRICE","Enter a positive USD price, such as 350 or 1,250.50. Negative values and shorthand are not accepted.");return;}
+ if(!catalogAvailable){out.innerHTML=abstain("DATA UNAVAILABLE","The catalog could not be loaded. Please try again later.");return;}
+ if(unsafeItem(raw)){out.innerHTML=abstain("ITEM NEEDS REVIEW","Parts, accessories, bundles, damaged or untested equipment need separate identification and evidence. No complete-machine recommendation is generated.");return;}
+ const match=concept2Match(raw),x=exactFind(raw);
+ if(!x){out.innerHTML=abstain("IDENTIFICATION UNCERTAIN","I can’t identify this reliably. Confirm the brand, exact model and equipment type, or select the model in Browse. Similar words are not enough to establish compatibility.");return;}
+ const label=match?.label||x.brand+" · "+x.model;
+ if(match&&(!match.identity.model||!match.identity.monitor)){out.innerHTML=abstain(label,"Confirm the frame model and monitor generation before valuation. A family match alone does not justify a purchase verdict.",x);return;}
+ if(lotLike(raw,x)){const total=parsePrice($("#totalWeight")?.value);out.innerHTML=abstain(label,"Confirm pair/set configuration and total weight. Comparable lot evidence is not sufficiently validated to score this item.",x)+(total?`<div class="price-strip"><div><span>PRICE / LB · arithmetic only</span><b>$${(p/total).toFixed(2)}</b></div></div>`:"");return;}
+ out.innerHTML='<div class="needs-data">Checking compatible sold evidence…</div>';
+ let rows;try{const ids=C.filter(r=>normalized(r.brand+" "+r.model)===normalized(x.brand+" "+x.model)).map(r=>r.id);rows=await observationsFor(ids);}catch(e){if(version===evaluationVersion){console.warn("GearKoala: sold evidence unavailable");out.innerHTML=abstain(label,"Sold evidence could not be loaded. This is a data-availability failure, not an estimate.",x);}return;}
+ if(version!==evaluationVersion)return;
+ const condition={"1":"excellent",".93":"good",".82":"fair"}[$("#condition").value],ev=reliableEvidence(rows,x,match,condition);
+ if(!ev.enough){out.innerHTML=abstain(label,"There are not enough recent, independently sourced, individually traceable sold observations for this exact model and condition. Retail prices, unknown condition and broad family matches cannot establish a deal score.",x);return;}
+ const ratio=p/ev.center,score=Math.round(Math.max(20,Math.min(99,120-ratio*70))),verdict=p<ev.low*.67?"POUNCE":p<ev.low*.82?"WORTH GRABBING":p<=ev.high?"WITHIN OBSERVED RANGE":"ABOVE OBSERVED RANGE";
+ out.innerHTML=`<div class="resulttop"><div><span class="result-kicker">${esc(label)}</span><h3>${score} <small>Grab Score</small></h3></div><strong class="verdict">${verdict}</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>MIDDLE HALF OF OBSERVED SALES</span><b>${money(ev.low)}–${money(ev.high)}</b></div></div><div class="evidence"><b>${ev.comps.length} eligible sales · ${esc(condition)} condition · USD · past year</b><p>This is an observed sale range, not a guarantee. Inspect the equipment and account for fees, transport and local market differences.</p><ul>${ev.comps.map(c=>`<li><a href="${esc(saleIdentity(c).url)}" target="_blank" rel="noopener noreferrer">${esc(saleIdentity(c).source)} · ${esc(c.sold_at.slice(0,10))} · ${money(soldPrice(c))}</a></li>`).join("")}</ul></div>`;
 }
 $("#go").onclick=evaluate;
 ["title","price","condition","lotQty","unitWeight","totalWeight","listingUrl"].forEach(id=>{let el=$("#"+id);if(el)el.addEventListener("input",clearResult)});

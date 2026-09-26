@@ -245,3 +245,11 @@ header nav a:hover{color:#4E8F5E;transform:translateY(-1px)}
  .price-strip{grid-template-columns:minmax(0,1fr)}
  .hero-product{padding-right:20px}
 }
+
+/* Reliability and accessible small-screen navigation. */
+:focus-visible{outline:3px solid #28623b!important;outline-offset:3px}
+header{height:auto;min-height:80px;flex-wrap:wrap;gap:14px;padding-top:14px;padding-bottom:14px}
+header nav{flex-wrap:wrap}
+@media(max-width:760px){header nav a{display:inline-block}header nav{gap:12px;width:100%}footer{flex-wrap:wrap;gap:16px}footer>*{max-width:100%;min-width:0}.familyhead{flex-wrap:wrap;gap:8px}.familyhead h2{overflow-wrap:anywhere}}
+.evidence a{overflow-wrap:anywhere}.resulttop>*{min-width:0}.suggestions button:focus-visible{outline-offset:-3px}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;scroll-behavior:auto!important;transition:none!important}}

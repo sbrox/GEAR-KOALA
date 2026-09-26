@@ -1,25 +1,25 @@
-# GearKoala V30 — server-side listing resolver
+# GearKoala
 
-Supersedes V28.
+Static fitness-equipment guide and Deal Checker, with two Vercel listing endpoints.
 
-## Link ingestion
-- Adds `/api/resolve-listing` Vercel serverless resolver.
-- Source-aware handling for GovPlanet, GovDeals and HiBid.
-- Reads OpenGraph/meta tags, JSON-LD structured data and visible text.
-- GovPlanet fallback can identify known make/model from publicly exposed title/URL even if detail fetch is blocked.
-- Price is never invented. If the marketplace does not expose it, the UI asks for price or screenshot.
-- Existing URL-slug fallback remains as the last fallback.
+## Reliability policy
 
-## Deployment
-- Includes `vercel.json` for the resolver.
-- This version should be deployed as a Vercel project rather than opened only as local static files, because `/api/resolve-listing` needs server-side execution.
-- Best long-term deployment path: Git repository connected to the existing Vercel project; pushes then create automatic deployments.
+Uncertainty produces an explicit abstention, not a purchase verdict. Exact identity, compatible configuration and condition, recent traceable USD sales, independent sources and a bounded price spread are required to score. MSRP is retail context only. Family identification is not enough to value a machine.
 
-## V30 source expansion
-- Adds Nextdoor, Reddit/local communities, estate & moving sales, and community classifieds to the Local Resale source universe.
-- These are discovery/asking-market sources by default, not verified sold comps.
-- Login-gated/community sources are designed for user-submitted URL/text/screenshot ingestion rather than unauthorized scraping.
-- Scout ticker stays category-level rather than listing every local source.
+The present gate requires five distinct eligible sales across at least two sources and sale dates in the past year. It deliberately excludes catalog-only links, missing transaction evidence, unknown condition, parts, damaged items and bundles. It does not repair or merge database records. Sources and eligibility still require ongoing human data QA; passing software tests does not verify a marketplace transaction.
 
+## Listing extraction
 
-V31: Source-safety language added. Facebook Marketplace, Nextdoor, Reddit, and community classifieds are explicitly user-submitted unless an authorized collection method is available. Added non-affiliation/data-partnership disclaimer and clearer evidence/expanding/user-submitted statuses.
+`/api/listing` and `/api/resolve-listing` use the same restricted HTTPS extractor in `listing-core.mjs`. It validates DNS destinations and redirects, bounds duration and response size, rejects failed/challenge/catalog pages, and requires one structured Product. Only a current, product-bound USD Offer can suggest a price. Users review the title and enter a confirmed asking price before evaluating. No slug guessing or whole-page dollar scraping is used.
+
+Blocked or unsupported sources require manual entry. Photo identification and Scout remain unavailable. The public GitHub issue link is for feedback; users should not include private data.
+
+## Development and validation
+
+Run `node --test tests/*.cjs tests/*.mjs` and `node --check` on JavaScript sources. A static HTTP server is enough for frontend testing; API testing requires Node/Vercel. No package install is needed for the server built-ins.
+
+Deploy working branches as previews in the existing `gearkoala-v1` Vercel project. Never promote production without explicit approval.
+
+## Operational follow-up
+
+Structured extraction failure logs contain an event and marketplace hostname, not a submitted URL. Client data failures are surfaced and logged. No third-party analytics tracker or persistent usage storage has been added. Set and verify a platform-wide abuse/rate policy and monitoring before public launch; per-function time/size restrictions alone are not distributed rate limiting.
