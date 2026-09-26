@@ -33,8 +33,8 @@ function clearResult(){evaluationVersion++;let o=$("#out");if(o)o.innerHTML=""}
 function bindCatalogSuggestions(containerSelector,onSelection){
  const input=$("#title"),list=$(containerSelector);if(!input||!list)return;
  const clear=()=>list.replaceChildren();
- const render=()=>{
-  selectedEquipmentId=null;clearResult();clear();
+ const render=(invalidate=true)=>{
+  selectedEquipmentId=null;if(invalidate)clearResult();clear();
   const text=input.value.trim().toLowerCase();if(text.length<3)return;
   for(const x of C.filter(x=>(x.brand+" "+x.model).toLowerCase().includes(text)).slice(0,7)){
    const b=document.createElement("button");b.type="button";b.textContent=x.brand+" "+x.model;
@@ -46,7 +46,9 @@ function bindCatalogSuggestions(containerSelector,onSelection){
  input.addEventListener("blur",()=>setTimeout(()=>{if(!list.contains(document.activeElement))clear();},0));
  // A user can begin typing before the asynchronous catalog arrives. Re-run the
  // same renderer once it is ready instead of requiring a second keystroke.
- catalogReady.then(()=>{if(input.value.trim().length>=3)render();});
+ // Do not invalidate an evaluation that is already awaiting the catalog: it
+ // can resolve a sufficiently specific direct entry without a suggestion.
+ catalogReady.then(()=>{if(input.value.trim().length>=3)render(false);});
  return {clear,render};
 }
 // Model D was renamed RowErg; PM5 is a monitor, not proof of a frame model.
