@@ -37,7 +37,7 @@ export async function runBrowserFlows(page, baseURL, group='all') {
   await page.locator('#price').fill('400');await page.locator('#go').click();
   await page.locator('#out .resulttop').waitFor({state:'visible',timeoutMs:20000});
   let text=await out.innerText();for(const pattern of echo)assert(pattern.test(text),`homepage autocomplete Echo: missing ${pattern}: ${text}`);
-  homepageEchoSnapshot=await page.evaluate(()=>window.GearKoalaValuation);
+  homepageEchoSnapshot=JSON.parse(await out.getAttribute('data-valuation'));
   assert(homepageEchoSnapshot?.compCount===2,'homepage did not publish the shared Echo valuation');
   results.push({name:'homepage Rogue suggestion selects canonical Echo Bike',pass:true,text});
 
@@ -58,7 +58,7 @@ export async function runBrowserFlows(page, baseURL, group='all') {
   await page.locator('#price').fill('400');await page.locator('#go').click();
   await page.locator('#out .resulttop').waitFor({state:'visible',timeoutMs:20000});
   text=await out.innerText();assert(/5 eligible sold observations/.test(text)&&/\$320–\$461/.test(text),`homepage Concept2 Model D suggestion did not value: ${text}`);
-  homepageConceptSnapshot=await page.evaluate(()=>window.GearKoalaValuation);
+  homepageConceptSnapshot=JSON.parse(await out.getAttribute('data-valuation'));
   results.push({name:'homepage Concept2 Model D suggestion evaluates',pass:true,text});
 
   await open('/');
@@ -84,7 +84,7 @@ export async function runBrowserFlows(page, baseURL, group='all') {
 
   await open('/checker.html');
   await check('Deal Checker click Echo $400','Rogue Echo Bike','400','click',echo);
-  const checkerEchoSnapshot=await page.evaluate(()=>window.GearKoalaValuation);
+  const checkerEchoSnapshot=JSON.parse(await out.getAttribute('data-valuation'));
   if(homepageEchoSnapshot){
    for(const key of ['transactionIds','compCount','range','median','confidence','verdict']){
     assert(JSON.stringify(checkerEchoSnapshot[key])===JSON.stringify(homepageEchoSnapshot[key]),`homepage/checker valuation mismatch for ${key}`);
@@ -93,7 +93,7 @@ export async function runBrowserFlows(page, baseURL, group='all') {
   }
   await check('Deal Checker Enter Echo $400','Rogue Echo Bike','400','enter',echo);
   await check('Deal Checker Model D PM5','Concept2 Model D PM5','400','enter',[/[1-9]\d* eligible sold observations/,/MEDIAN SOLD PRICE/,/Concept2/]);
-  const checkerConceptSnapshot=await page.evaluate(()=>window.GearKoalaValuation);
+  const checkerConceptSnapshot=JSON.parse(await out.getAttribute('data-valuation'));
   if(homepageConceptSnapshot){
    for(const key of ['transactionIds','compCount','range','median','confidence','verdict']){
     assert(JSON.stringify(checkerConceptSnapshot[key])===JSON.stringify(homepageConceptSnapshot[key]),`homepage/checker Concept2 valuation mismatch for ${key}`);

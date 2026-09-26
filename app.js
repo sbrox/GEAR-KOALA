@@ -26,7 +26,7 @@ function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt
 function airdyneAmbiguous(t){return /air\s*dyne|airdyne/i.test(t)&&!/ad\s*[24567]|pro.?comp|evolution/i.test(t)}
 function lotLike(t,x){return /dumbbell|plate|bumper/i.test(t)||x?.valuation_mode==="lot_weight"||x?.valuation_mode==="hybrid"}
 function selectEquipment(id){selectedEquipmentId=id||null;const x=C.find(x=>x.id===id);$("#title").value=x?x.brand+" "+x.model:"";clearResult();return x;}
-function clearResult(){evaluationVersion++;globalThis.GearKoalaValuation=undefined;let o=$("#out");if(o)o.innerHTML=""}
+function clearResult(){evaluationVersion++;globalThis.GearKoalaValuation=undefined;let o=$("#out");if(o){delete o.dataset.valuation;o.innerHTML=""}}
 // Both entry pages use this one catalog picker. Selecting a suggestion records
 // the catalog ID; typing remains deliberately non-authoritative until it can
 // resolve to exactly one compatible model during evaluation.
@@ -247,6 +247,7 @@ function valuationSnapshot(label,x,p,ev,decision){
 }
 function publishValuation(snapshot){
  globalThis.GearKoalaValuation=Object.freeze(snapshot);
+ const out=$("#out");if(out)out.dataset.valuation=JSON.stringify(snapshot);
 }
 function renderValuation(label,x,p,ev,condition,decision=valuationDecision(x,p,ev,condition)){
  const hasSales=ev.comps.length>0;
