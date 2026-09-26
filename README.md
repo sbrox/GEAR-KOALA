@@ -4,9 +4,13 @@ Static fitness-equipment guide and Deal Checker, with two Vercel listing endpoin
 
 ## Reliability policy
 
-Uncertainty produces an explicit abstention, not a purchase verdict. Exact identity, compatible configuration and condition, recent traceable USD sales, independent sources and a bounded price spread are required to score. MSRP is retail context only. Family identification is not enough to value a machine.
+Ambiguous identities, accessories, damaged equipment and unverified asking prices cannot produce a whole-equipment purchase recommendation. Valuation evidence and a purchase verdict are separate decisions.
 
-The present gate requires five distinct eligible sales across at least two sources and sale dates in the past year. It deliberately excludes catalog-only links, missing transaction evidence, unknown condition, parts, damaged items and bundles. It does not repair or merge database records. Sources and eligibility still require ongoing human data QA; passing software tests does not verify a marketplace transaction.
+Known equipment with compatible verified sales receives a sale range and median. Three or more distinct sales support a market estimate; one or two are labeled a limited sales reference. Recent observations are preferred where sufficient. Catalog-plus-lot evidence and verified buyer attestations are recognized and labeled; duplicates and contradictory prices are not counted twice. Incomplete condition/date metadata lowers the interpretation rather than erasing all useful sale evidence.
+
+A Grab Score/purchase verdict additionally requires a specific compatible configuration, at least two sources, dated sales within the past year, matching known condition, and a bounded price spread. Family-level, historical, buyer-attested and mixed/unknown-condition pools remain unscored. A retail-only reference is explicitly labeled as a rough heuristic with zero sold comps; it cannot produce a purchase verdict. No database schema or records are changed.
+
+Concept2 Model D / standard RowErg uses exact model → compatible frame/monitor → same-monitor family fallback. Explicit PM3/PM4/PM5, Model E/tall-leg, Dynamic, SkiErg and BikeErg differences are respected. Missing Model D monitor information offers separate configuration choices instead of silently mixing generations. RowErg defaults to its standard PM5 configuration; explicit conflicting equipment remains excluded.
 
 ## Listing extraction
 

@@ -1,11 +1,20 @@
 const q=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)];
 let mode='search',linkVersion=0,linkController;
-function resetInput(){clearResult();q('#title').value='';q('#suggestions').replaceChildren();q('#lotQty').value='';q('#unitWeight').value='';q('#totalWeight').value='';delete q('#totalWeight').dataset.manual;}
+function resetInput(){selectedEquipmentId=null;clearResult();q('#title').value='';q('#suggestions').replaceChildren();q('#lotQty').value='';q('#unitWeight').value='';q('#totalWeight').value='';delete q('#totalWeight').dataset.manual;}
 function setMode(next){linkVersion++;linkController?.abort();mode=next;resetInput();qa('.entrytab').forEach(b=>{b.classList.toggle('active',b.dataset.mode===next);b.setAttribute('aria-pressed',String(b.dataset.mode===next));});qa('.entrymode').forEach(e=>e.classList.toggle('active',e.id===next+'Mode'));if(next==='browse')updateModels();q('#go').disabled=next==='photo';updateLotUI();}
-function updateModels(reset=true){if(reset)resetInput();const brand=q('#browseBrand').value,category=q('#browseCategory').value;q('#browseModel').replaceChildren(new Option('Choose an exact model',''));for(const x of C.filter(x=>(!brand||x.brand===brand)&&(!category||x.category.toLowerCase()===category)))q('#browseModel').add(new Option(x.brand+' '+x.model,x.id));}
+function updateModels(reset=true){
+ if(reset)resetInput();const brand=q('#browseBrand').value,category=q('#browseCategory').value;
+ const matches=C.filter(x=>(!brand||x.brand===brand)&&(!category||x.category.toLowerCase()===category));
+ q('#browseModel').replaceChildren(new Option('Choose an exact model',''));
+ for(const x of matches)q('#browseModel').add(new Option(x.brand+' '+x.model,x.id));
+ // Only one catalog identity fits these explicit filters: select it visibly.
+ // Multiple models never silently resolve to the first option.
+ if(brand&&category&&matches.length===1){q('#browseModel').value=matches[0].id;selectEquipment(matches[0].id);}
+ updateLotUI();
+}
 qa('.entrytab').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 q('#browseCategory').onchange=()=>updateModels();q('#browseBrand').onchange=()=>updateModels();
-q('#browseModel').onchange=()=>{clearResult();const x=C.find(x=>x.id===q('#browseModel').value);q('#title').value=x?x.brand+' '+x.model:'';updateLotUI();};
+q('#browseModel').onchange=()=>{selectEquipment(q('#browseModel').value);updateLotUI();};
 catalogReady.then(()=>{for(const v of [...new Set(C.map(x=>x.category?.toLowerCase()).filter(Boolean))].sort())q('#browseCategory').add(new Option(v,v));for(const v of [...new Set(C.map(x=>x.brand).filter(Boolean))].sort())q('#browseBrand').add(new Option(v,v));updateModels(false);});
 // Suggestions are optional buttons, never an automatic identity substitution.
 q('#title').addEventListener('input',()=>{const text=q('#title').value.trim().toLowerCase();q('#suggestions').replaceChildren();if(text.length<3)return;for(const x of C.filter(x=>(x.brand+' '+x.model).toLowerCase().includes(text)).slice(0,7)){const b=document.createElement('button');b.type='button';b.textContent=x.brand+' '+x.model;b.onclick=()=>{clearResult();q('#title').value=b.textContent;q('#suggestions').replaceChildren();updateLotUI();};q('#suggestions').append(b);}updateLotUI();});
