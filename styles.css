@@ -255,4 +255,4 @@ header nav{flex-wrap:wrap}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;scroll-behavior:auto!important;transition:none!important}}
 
 /* Provenance labels describe different evidence mechanisms, not equal badges. */
-.sale-evidence{padding-left:20px}.sale-evidence li{margin:16px 0;line-height:1.55}.provenance-label{display:block;font-size:10px;letter-spacing:.06em}.provenance-detail{display:block;color:#66716b;font-size:12px}.attested-sale .provenance-label{color:#785b2b}.public-sale .provenance-label{color:#356146}#go:disabled{opacity:.65;cursor:wait}
+.sale-evidence{padding-left:20px}.sale-evidence li{margin:16px 0;line-height:1.55}.evidence .provenance-label{display:block;font-size:10px;letter-spacing:.06em}.provenance-detail{display:block;color:#66716b;font-size:12px}.attested-sale .provenance-label{color:#785b2b}.public-sale .provenance-label{color:#356146}#go:disabled{opacity:.65;cursor:wait}
