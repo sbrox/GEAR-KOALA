@@ -2,6 +2,7 @@
 // page: Playwright Page, or {goto: tab.goto.bind(tab), ...tab.playwright} via adapter.
 export async function runBrowserFlows(page, baseURL, group='all') {
  const results=[];
+ let homepageEchoSnapshot,homepageConceptSnapshot;
  const assert=(ok,message)=>{if(!ok)throw Error(message);};
  const out=page.locator('#out');
  async function check(name,title,price,submit,expected,rejected=/POUNCE|Grab Score/) {
@@ -36,6 +37,8 @@ export async function runBrowserFlows(page, baseURL, group='all') {
   await page.locator('#price').fill('400');await page.locator('#go').click();
   await page.locator('#out .resulttop').waitFor({state:'visible',timeoutMs:20000});
   let text=await out.innerText();for(const pattern of echo)assert(pattern.test(text),`homepage autocomplete Echo: missing ${pattern}: ${text}`);
+  homepageEchoSnapshot=await page.evaluate(()=>window.GearKoalaValuation);
+  assert(homepageEchoSnapshot?.compCount===2,'homepage did not publish the shared Echo valuation');
   results.push({name:'homepage Rogue suggestion selects canonical Echo Bike',pass:true,text});
 
   await open('/');
@@ -55,6 +58,7 @@ export async function runBrowserFlows(page, baseURL, group='all') {
   await page.locator('#price').fill('400');await page.locator('#go').click();
   await page.locator('#out .resulttop').waitFor({state:'visible',timeoutMs:20000});
   text=await out.innerText();assert(/5 eligible sold observations/.test(text)&&/\$320–\$461/.test(text),`homepage Concept2 Model D suggestion did not value: ${text}`);
+  homepageConceptSnapshot=await page.evaluate(()=>window.GearKoalaValuation);
   results.push({name:'homepage Concept2 Model D suggestion evaluates',pass:true,text});
 
   await open('/');
@@ -80,8 +84,22 @@ export async function runBrowserFlows(page, baseURL, group='all') {
 
   await open('/checker.html');
   await check('Deal Checker click Echo $400','Rogue Echo Bike','400','click',echo);
+  const checkerEchoSnapshot=await page.evaluate(()=>window.GearKoalaValuation);
+  if(homepageEchoSnapshot){
+   for(const key of ['transactionIds','compCount','range','median','confidence','verdict']){
+    assert(JSON.stringify(checkerEchoSnapshot[key])===JSON.stringify(homepageEchoSnapshot[key]),`homepage/checker valuation mismatch for ${key}`);
+   }
+   results.push({name:'homepage and Deal Checker share the exact Echo valuation object',pass:true,text:JSON.stringify(checkerEchoSnapshot)});
+  }
   await check('Deal Checker Enter Echo $400','Rogue Echo Bike','400','enter',echo);
   await check('Deal Checker Model D PM5','Concept2 Model D PM5','400','enter',[/[1-9]\d* eligible sold observations/,/MEDIAN SOLD PRICE/,/Concept2/]);
+  const checkerConceptSnapshot=await page.evaluate(()=>window.GearKoalaValuation);
+  if(homepageConceptSnapshot){
+   for(const key of ['transactionIds','compCount','range','median','confidence','verdict']){
+    assert(JSON.stringify(checkerConceptSnapshot[key])===JSON.stringify(homepageConceptSnapshot[key]),`homepage/checker Concept2 valuation mismatch for ${key}`);
+   }
+   results.push({name:'homepage and Deal Checker share the exact Concept2 valuation object',pass:true,text:JSON.stringify(checkerConceptSnapshot)});
+  }
   await check('Deal Checker RowErg','Concept2 RowErg','400','click',[/[1-9]\d* eligible sold observations/,/MEDIAN SOLD PRICE/,/Concept2/]);
   await check('Deal Checker generic treadmill abstains','treadmill','400','enter',[/IDENTIFICATION UNCERTAIN/,/Not scored/],/POTENTIALLY GOOD PRICE|POUNCE|Grab Score/);
   await check('Deal Checker replacement chain abstains','Concept2 replacement chain PM5','50','click',[/ITEM NEEDS REVIEW/,/Not scored/],/POTENTIALLY GOOD PRICE|POUNCE|Grab Score/);

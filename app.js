@@ -26,7 +26,7 @@ function esc(s){return String(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt
 function airdyneAmbiguous(t){return /air\s*dyne|airdyne/i.test(t)&&!/ad\s*[24567]|pro.?comp|evolution/i.test(t)}
 function lotLike(t,x){return /dumbbell|plate|bumper/i.test(t)||x?.valuation_mode==="lot_weight"||x?.valuation_mode==="hybrid"}
 function selectEquipment(id){selectedEquipmentId=id||null;const x=C.find(x=>x.id===id);$("#title").value=x?x.brand+" "+x.model:"";clearResult();return x;}
-function clearResult(){evaluationVersion++;let o=$("#out");if(o)o.innerHTML=""}
+function clearResult(){evaluationVersion++;globalThis.GearKoalaValuation=undefined;let o=$("#out");if(o)o.innerHTML=""}
 // Both entry pages use this one catalog picker. Selecting a suggestion records
 // the catalog ID; typing remains deliberately non-authoritative until it can
 // resolve to exactly one compatible model during evaluation.
@@ -231,7 +231,24 @@ function directionalAssessment(p,ev){
  const difference=Math.round(Math.abs(p/ev.center-1)*100);
  return {verdict,explanation:`${money(p)} is ${difference?difference+"% "+(p<ev.center?"below":"above"):"equal to"} the ${money(ev.center)} sample median${p===ev.low?" and matches the lowest recorded sale":""}. This is a directional comparison, not a reliable discount or savings estimate.`};
 }
-function renderValuation(label,x,p,ev,condition){
+// This is the sole valuation decision used by both the homepage and Deal
+// Checker. Surface scripts may choose where to place the returned markup, but
+// never re-filter sales or recompute a price/score.
+function valuationDecision(x,p,ev,condition){
+ if(!ev.comps.length)return {confidence:"low",verdict:"NO DEAL VERDICT",headline:"Reference estimate",direction:null};
+ let headline=ev.enough?"Market estimate":"Limited sales reference",verdict="NO DEAL VERDICT";
+ const direction=!ev.canRecommend&&ev.directional?directionalAssessment(p,ev):null;
+ if(direction){headline="Low-confidence assessment";verdict=direction.verdict;}
+ if(ev.canRecommend){const ratio=p/ev.center,score=Math.round(Math.max(20,Math.min(99,120-ratio*70)));headline=score+' <small>Grab Score</small>';verdict=p<ev.low*.67?"POUNCE":p<ev.low*.82?"WORTH GRABBING":p<=ev.high?"WITHIN OBSERVED RANGE":"ABOVE OBSERVED RANGE";}
+ return {confidence:ev.canRecommend?"high":direction?"low":"limited",verdict,headline,direction};
+}
+function valuationSnapshot(label,x,p,ev,decision){
+ return {productId:x.id,label,asking:p,transactionIds:ev.comps.map(c=>c.id),compCount:ev.comps.length,range:[ev.low,ev.high],median:ev.center,confidence:decision.confidence,verdict:decision.verdict};
+}
+function publishValuation(snapshot){
+ globalThis.GearKoalaValuation=Object.freeze(snapshot);
+}
+function renderValuation(label,x,p,ev,condition,decision=valuationDecision(x,p,ev,condition)){
  const hasSales=ev.comps.length>0;
  if(!hasSales){
   const retail=Number(x.current_new_price||x.msrp),rates={"air bike":.66,rower:.68,"power rack":.64,"squat stand":.65};
@@ -240,10 +257,7 @@ function renderValuation(label,x,p,ev,condition){
   const factor={excellent:1,good:.93,fair:.82}[condition]||1,center=retail*rate*factor;
   return `<div class="resulttop unscored"><div><span class="result-kicker">${esc(label)}</span><h3>Reference estimate</h3></div><strong class="verdict">NO DEAL VERDICT</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>RETAIL-BASED REFERENCE · NOT SOLD VALUE</span><b>${money(center*.9)}–${money(center*1.1)}</b></div><div><span>CATALOG NEW PRICE</span><b>${money(retail)}</b></div></div><div class="evidence"><b>0 eligible sold observations · low confidence</b><p>This rough reference uses the catalog new price × ${Math.round(rate*100)}% category factor × ${factor} condition factor. It is not a verified market valuation and cannot justify a purchase recommendation. Confirm the exact configuration and compare actual sales before buying.</p><p>${esc(x.gear_brief||x.short_description||"")}</p></div>`;
  }
- let headline=ev.enough?"Market estimate":"Limited sales reference",verdict="NO DEAL VERDICT";
- const direction=!ev.canRecommend&&ev.directional?directionalAssessment(p,ev):null;
- if(direction){headline="Low-confidence assessment";verdict=direction.verdict;}
- if(ev.canRecommend){const ratio=p/ev.center,score=Math.round(Math.max(20,Math.min(99,120-ratio*70)));headline=score+' <small>Grab Score</small>';verdict=p<ev.low*.67?"POUNCE":p<ev.low*.82?"WORTH GRABBING":p<=ev.high?"WITHIN OBSERVED RANGE":"ABOVE OBSERVED RANGE";}
+ const {headline,verdict,direction}=decision;
  return `<div class="resulttop ${ev.canRecommend?"":"unscored"}"><div><span class="result-kicker">${esc(label)}</span><h3>${headline}</h3></div><strong class="verdict">${verdict}</strong></div><div class="price-strip"><div><span>ASKING</span><b>${money(p)}</b></div><div><span>${ev.enough?"MIDDLE HALF OF OBSERVED SALES":"OBSERVED SALE RANGE"}</span><b>${money(ev.low)}–${money(ev.high)}</b></div><div><span>MEDIAN SOLD PRICE</span><b>${money(ev.center)}</b></div></div><div class="evidence"><b>${ev.comps.length} eligible sold observations · ${esc(ev.level)} · USD${direction?" · LOW CONFIDENCE":""}</b><p>${ev.canRecommend?"Matched condition and recent independent sales support this comparison.":(direction?direction.explanation+" Confirm condition and configuration before acting. ":"Value evidence, not a purchase recommendation. ")+(ev.comps.length<3?"Small sample. ":"")+(ev.conditionKnown?"":"Reported conditions vary or are incomplete; this is not a condition-adjusted valuation. ")+(ev.dated?"":"Some sale dates are unavailable or historical. ")+(matchFamilyLabel(ev)?"Confirm the frame/configuration before applying this range. ":"")}</p><p>Inspect the equipment and account for auction fees, transport and local market differences.</p>${evidenceList(ev)}</div>`;
 }
 function matchFamilyLabel(ev){return /family/.test(ev.level);}
@@ -274,7 +288,9 @@ async function evaluate(){
  if(version!==evaluationVersion)return;
  const condition={"1":"excellent",".93":"good",".82":"fair"}[$("#condition").value],ev=reliableEvidence(rows,x,match,condition,Date.now(),raw);
  if(/\bv(?:ersion)?\s*\d/i.test(raw)&&!ev.comps.length){out.innerHTML=abstain(label,"No sold evidence confirms the requested generation. A different or unknown generation cannot establish its value.",x);return;}
- out.innerHTML=renderValuation(label,x,p,ev,condition);
+ const decision=valuationDecision(x,p,ev,condition);
+ publishValuation(valuationSnapshot(label,x,p,ev,decision));
+ out.innerHTML=renderValuation(label,x,p,ev,condition,decision);
 }
 $("#go").onclick=null;
 // A real form makes mouse, keyboard and mobile submit use the same flow.

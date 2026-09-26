@@ -43,6 +43,9 @@ footer{padding-top:28px;padding-bottom:28px}
 .metricrow{border:0;gap:8px}.metricrow div{background:#EEF4ED;padding:24px;border:0}.metricrow div:nth-child(2){transform:translateY(10px)}.metricrow div:nth-child(3){transform:translateY(-6px)}
 .data{position:relative}.section-meta{display:flex;flex-direction:column;align-items:flex-end;gap:14px;flex-shrink:0}.market-id{font-size:9px;letter-spacing:.18em;color:#9aa7a1}.section-meta .beta{white-space:nowrap}
 @media(max-width:760px){.hero-product{transform:none;box-shadow:9px 9px 0 #B7D1BC}.metricrow div:nth-child(n){transform:none}.section-meta{flex-direction:row;justify-content:space-between;align-items:center;margin-bottom:18px}.section-meta .beta{margin-bottom:0}}
+/* The two signal labels are distinct: hold them in their own mobile row so
+   the market identifier cannot paint through the evidence badge. */
+@media(max-width:600px){.sectionhead .section-meta{position:static;display:grid;grid-template-columns:max-content max-content;width:100%;justify-content:space-between;column-gap:12px;align-items:center;margin:0 0 18px}.sectionhead .section-meta .beta{margin:0}}
 
 /* V9 proprietary GearKoala visual grammar */
 body{overflow-x:hidden}
