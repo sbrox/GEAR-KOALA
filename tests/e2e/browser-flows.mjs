@@ -17,7 +17,7 @@ export async function runBrowserFlows(page, baseURL, group='all') {
   assert(!rejected.test(text),`${name}: unexpected verdict: ${text}`);
   results.push({name,pass:true,text});
  }
- const echo=[/POTENTIALLY GOOD PRICE/,/LIMITED MARKET SIGNAL/,/2 eligible sold observations/,/\$400–\$600/,/20% below/,/BUYER-ATTESTED TRANSACTION/,/PUBLIC AUCTION RESULT/,/Not independently source-verifiable/];
+ const echo=[/WORTH GRABBING/,/72 Grab Score/,/LIMITED MARKET SIGNAL/,/2 eligible sold observations/,/\$400–\$600/,/BUYER-ATTESTED TRANSACTION/,/PUBLIC AUCTION RESULT/,/Not independently source-verifiable/];
  async function chooseSuggestion(container,name){
   const menu=page.locator(container);await menu.locator('button').first().waitFor({state:'visible',timeoutMs:20000});
   const choices=await menu.locator('button').allTextContents();

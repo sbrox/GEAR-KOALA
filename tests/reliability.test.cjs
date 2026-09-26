@@ -53,7 +53,7 @@ test('adequate compatible independent known-condition sales can still produce a 
 test('edited inputs invalidate in-flight valuations',async()=>{const {ctx,fields}=setup();let finish;ctx.observationsFor=()=>new Promise(r=>finish=r);fields['#title'].value='Rogue Echo Bike';const pending=ctx.evaluate();await Promise.resolve();ctx.clearResult();finish([]);await pending;assert.equal(fields['#out'].innerHTML,'');});
 
 test('REAL POSITIVE: Rogue Echo Bike at $400 returns a cautious direction from two credible sales',async()=>{
- const {ctx,fields}=realSetup();const html=await run(ctx,fields,'Rogue Echo Bike','400');assert.match(html,/POTENTIALLY GOOD PRICE/);assert.match(html,/LIMITED MARKET SIGNAL/);assert.match(html,/20% below/);assert.match(html,/2 eligible sold observations/);assert.match(html,/\$400–\$600/);assert.match(html,/MEDIAN SOLD PRICE<\/span><b>\$500/);assert.match(html,/BUYER-ATTESTED TRANSACTION/);assert.match(html,/PUBLIC AUCTION RESULT/);assert.match(html,/Not independently source-verifiable/);assert.doesNotMatch(html,/I can’t value/);noRecommendation(html);
+ const {ctx,fields}=realSetup();const html=await run(ctx,fields,'Rogue Echo Bike','400');assert.match(html,/WORTH GRABBING/);assert.match(html,/72 <small>Grab Score<\/small>/);assert.match(html,/LIMITED MARKET SIGNAL/);assert.match(html,/2 eligible sold observations/);assert.match(html,/\$400–\$600/);assert.match(html,/MEDIAN SOLD PRICE<\/span><b>\$500/);assert.match(html,/BUYER-ATTESTED TRANSACTION/);assert.match(html,/PUBLIC AUCTION RESULT/);assert.match(html,/Not independently source-verifiable/);assert.doesNotMatch(html,/I can’t value/);
 });
 test('REAL POSITIVE: Model D PM5 and RowErg PM5 retrieve compatible identities and return useful values',async()=>{
  const {ctx,fields}=realSetup();for(const title of ['Concept2 Model D PM5','Concept2 RowErg PM5','Concept2 RowErg','Concept2 commercial rowing machine PM5 used']){
@@ -80,14 +80,29 @@ test('Browse with multiple matching models does not silently select or reuse a p
  const {ctx,fields}=realSetup();vm.runInContext(readFileSync(new URL('../checker-ui.js',`file://${__filename}`),'utf8'),ctx);await Promise.resolve();ctx.setMode('browse');fields['#browseBrand'].value='Concept2';fields['#browseCategory'].value='rower';ctx.updateModels();assert.equal(fields['#title'].value,'');assert.equal(fields['#browseModel'].value,'');await ctx.evaluate();assert.match(fields['#out'].innerHTML,/IDENTIFICATION NEEDED/);
 });
 
-test('small credible pools permit direction without enabling POUNCE; weak evidence still abstains',()=>{
+test('small credible pools permit a verdict while weak evidence still abstains',()=>{
  const {ctx}=setup(),x=ctx.rows[0],rows=[sale(1),sale(2)];
  const ev=ctx.reliableEvidence(rows,x,null,'good',NOW);assert.equal(ev.directional,true);assert.equal(ev.canRecommend,false);
  for(const data of [[sale(1)],rows.map(c=>({...c,condition:'unknown'})),rows.map(c=>({...c,condition:'fair'})),rows.map(c=>({...c,sold_at:'2020-01-01'})),rows.map(c=>({...c,verification_status:'asking_verified'})),[sale(1),sale(3)]])assert.equal(ctx.reliableEvidence(data,x,null,'excellent',NOW).directional,false);
  const wide=ctx.reliableEvidence([sale(1),sale(2,{normalized_price:5000})],x,null,'good',NOW);assert.equal(wide.directional,false);
- assert.equal(ctx.directionalAssessment(400,{low:400,high:600,center:500}).verdict,'POTENTIALLY GOOD PRICE');
- assert.equal(ctx.directionalAssessment(500,{low:400,high:600,center:500}).verdict,'WITHIN OBSERVED RANGE');
- assert.equal(ctx.directionalAssessment(700,{low:400,high:600,center:500}).verdict,'LOOKS HIGH VS SALES');
+ assert.equal(ctx.valuationDecision(x,100,ev,'good').verdict,'POUNCE');
+ assert.equal(ctx.valuationDecision(x,500,ev,'good').verdict,'FAIR');
+ assert.equal(ctx.valuationDecision(x,650,ev,'good').verdict,'PASS / NEGOTIATE');
+});
+test('same price ratio has the same verdict and score for good and limited Market Signals',()=>{
+ const {ctx}=setup(),x=ctx.rows[0];
+ const limited=ctx.reliableEvidence([sale(1),sale(2)],x,null,'good',NOW);
+ const good=ctx.reliableEvidence([1,2,3,4,5].map(i=>sale(i)),x,null,'good',NOW);
+ assert.equal(limited.directional,true);assert.equal(limited.comps.length,2);assert.equal(good.comps.length,5);
+ assert.equal(ctx.valuationDecision(x,limited.center*.2,limited,'good').signal,'LIMITED MARKET SIGNAL');
+ assert.equal(ctx.valuationDecision(x,good.center*.2,good,'good').signal,'GOOD MARKET SIGNAL');
+ for(const [ratio,verdict] of [[.2,'POUNCE'],[.75,'WORTH GRABBING'],[.8,'WORTH GRABBING'],[1,'FAIR'],[1.3,'PASS / NEGOTIATE']]){
+  const a=ctx.valuationDecision(x,limited.center*ratio,limited,'good'),b=ctx.valuationDecision(x,good.center*ratio,good,'good');
+  assert.equal(a.verdict,verdict,`limited ${ratio}`);assert.equal(b.verdict,verdict,`good ${ratio}`);assert.equal(a.score,b.score,`score ${ratio}`);
+ }
+});
+test('unusually low credible-sale prices carry a safety warning without downgrading POUNCE',async()=>{
+ const {ctx,fields}=realSetup();const html=await run(ctx,fields,'Rogue Echo Bike','100');assert.match(html,/POUNCE/);assert.match(html,/LIMITED MARKET SIGNAL/);assert.match(html,/PRICE CHECK/);assert.match(html,/Price is unusually low relative to observed sales/);
 });
 test('Grab Score is monotonic and numerically agrees with the verdict boundaries',()=>{
  const {ctx}=setup(),x=ctx.rows[0],ev=ctx.reliableEvidence([1,2,3,4,5].map(i=>sale(i)),x,null,'good',NOW);
