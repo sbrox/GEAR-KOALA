@@ -44,6 +44,9 @@ function bindCatalogSuggestions(containerSelector,onSelection){
  input.addEventListener("input",render);
  input.addEventListener("keydown",e=>{if(e.key==="Escape")clear();});
  input.addEventListener("blur",()=>setTimeout(()=>{if(!list.contains(document.activeElement))clear();},0));
+ // A user can begin typing before the asynchronous catalog arrives. Re-run the
+ // same renderer once it is ready instead of requiring a second keystroke.
+ catalogReady.then(()=>{if(input.value.trim().length>=3)render();});
  return {clear,render};
 }
 // Model D was renamed RowErg; PM5 is a monitor, not proof of a frame model.
